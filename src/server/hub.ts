@@ -4,6 +4,7 @@
 //   npx tsx src/server/hub.ts --source sim                    模擬センサー
 //   npx tsx src/server/hub.ts --source sim --touches          手のタッチも混ぜる
 //   npx tsx src/server/hub.ts --source replay --file recordings/x.jsonl
+//   npx tsx src/server/hub.ts --source lidar --host 192.168.0.10     本物の測域センサ
 //   ... --record recordings/x.jsonl                           生のスキャンを記録する
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -14,7 +15,7 @@ import type { Homography } from "../input/calibration.ts";
 import { Pipeline } from "../input/pipeline.ts";
 import { type ClientMessage, HUB_PORT, type HubMessage, type WallAction } from "../shared/protocol.ts";
 import { Recorder } from "./recorder.ts";
-import { ReplaySource, type ScanSource, SimSource } from "./sources.ts";
+import { LidarSource, ReplaySource, type ScanSource, SimSource } from "./sources.ts";
 
 const CALIBRATION_FILE = "config/calibration.json";
 const PARAMS_FILE = "config/params.json";
@@ -26,6 +27,8 @@ const { values: args } = parseArgs({
     file: { type: "string" },
     record: { type: "string" },
     touches: { type: "boolean", default: false },
+    host: { type: "string", default: "192.168.0.10" },
+    "scip-port": { type: "string" },
     players: { type: "string" },
     port: { type: "string", default: String(HUB_PORT) },
     "no-loop": { type: "boolean", default: false },
@@ -53,6 +56,12 @@ async function makeSource(): Promise<ScanSource> {
       await r.load();
       return r;
     }
+    case "lidar": {
+      const l = new LidarSource(args.host!, args["scip-port"] ? Number(args["scip-port"]) : undefined);
+      l.onLog = (msg, extra) => log(msg, extra);
+      await l.probe();
+      return l;
+    }
     default:
       throw new Error(`未対応の入力元です: ${args.source}`);
   }
@@ -71,6 +80,10 @@ async function main(): Promise<void> {
   if (!homography) log("hub.warn", { detail: "合わせ込みがまだです。/calibrate を実行してください" });
 
   const pipeline = new Pipeline(source.spec, { source: source.name, homography });
+  if ("onRestart" in source) source.onRestart = () => {
+    log("detector.reset", { detail: "センサーにつなぎ直したので、背景を覚え直します" });
+    pipeline.detector.resetBackground();
+  };
   const recorder = args.record
     ? new Recorder(args.record, { spec: source.spec, source: source.name, knownHomography: source.knownHomography })
     : null;

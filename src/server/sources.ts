@@ -1,9 +1,10 @@
-// スキャンの入力元：模擬センサー／記録の再生（本物のセンサーは T15 で追加）。
+// スキャンの入力元：模擬センサー／記録の再生／本物の測域センサ（SCIP 2.0）。
 
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 import type { Homography } from "../input/calibration.ts";
 import { type Scan, type ScanSpec, UST_20LX } from "../input/scan.ts";
+import { SCIP_PORT, ScipClient, cleanRanges, parseParams, specFromParams } from "../input/scip.ts";
 import { Simulator, addRandomBalls, handTouch, makeRng } from "../input/sim/simulator.ts";
 
 export interface ScanSource {
@@ -13,6 +14,10 @@ export interface ScanSource {
   readonly knownHomography: Homography | null;
   start(onScan: (scan: Scan) => void): Promise<void>;
   stop(): void;
+  /** つなぎ直したとき（センサーが動いたかもしれないので、背景を覚え直す） */
+  onRestart?: (() => void) | null;
+  /** 状態の記録用 */
+  onLog?: ((msg: string, extra?: Record<string, unknown>) => void) | null;
 }
 
 /** 記録ファイルの1行目 */
@@ -137,5 +142,85 @@ export class ReplaySource implements ScanSource {
   stop(): void {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
+  }
+}
+
+/**
+ * 本物の測域センサ（SCIP 2.0、TCP）。
+ * 接続が切れても、1秒〜5秒おきにつなぎ直し続ける（その間、画面は待機状態になる）。
+ */
+export class LidarSource implements ScanSource {
+  readonly name = "lidar";
+  /** 接続したときにセンサーから読んだ値で上書きする（同じオブジェクトを書き換える） */
+  readonly spec: ScanSpec = { ...UST_20LX };
+  readonly knownHomography = null;
+  onRestart: (() => void) | null = null;
+  onLog: ((msg: string, extra?: Record<string, unknown>) => void) | null = null;
+  private client: ScipClient | null = null;
+  private stopped = false;
+  private seq = 0;
+  private connectedOnce = false;
+
+  constructor(
+    readonly host: string,
+    readonly port = SCIP_PORT,
+  ) {}
+
+  /** 最初の接続を試す（つながらなくても start でつなぎ直し続ける） */
+  async probe(): Promise<boolean> {
+    try {
+      const c = new ScipClient(this.host, this.port);
+      await c.connect(3000);
+      const pp = parseParams(await c.command("PP"));
+      Object.assign(this.spec, specFromParams(pp));
+      c.close();
+      this.onLog?.("lidar.probe", { ok: true, spec: this.spec });
+      return true;
+    } catch (e) {
+      this.onLog?.("lidar.probe", { ok: false, error: e instanceof Error ? e.message : String(e) });
+      return false;
+    }
+  }
+
+  async start(onScan: (scan: Scan) => void): Promise<void> {
+    let delay = 1000;
+    const run = async () => {
+      if (this.stopped) return;
+      const c = new ScipClient(this.host, this.port);
+      this.client = c;
+      try {
+        await c.connect(3000);
+        const vv = await c.command("VV");
+        const pp = parseParams(await c.command("PP"));
+        Object.assign(this.spec, specFromParams(pp));
+        this.onLog?.("lidar.connect", { info: vv.lines.map((l) => l.slice(0, -2)), spec: this.spec });
+        if (this.connectedOnce) this.onRestart?.();
+        this.connectedOnce = true;
+        delay = 1000;
+        c.onClose = () => {
+          this.onLog?.("lidar.disconnect", {});
+          if (!this.stopped) setTimeout(run, delay);
+        };
+        await c.streamMD(0, this.spec.steps - 1, (ranges) => {
+          onScan({ seq: this.seq++, t: Date.now(), ranges: cleanRanges(ranges, this.spec) });
+        });
+      } catch (e) {
+        this.onLog?.("lidar.error", { error: e instanceof Error ? e.message : String(e), retryMs: delay });
+        c.onClose = null;
+        c.close();
+        if (!this.stopped) setTimeout(run, delay);
+        delay = Math.min(delay * 2, 5000);
+      }
+    };
+    await run();
+  }
+
+  stop(): void {
+    this.stopped = true;
+    try {
+      this.client?.command("QT").catch(() => {});
+    } finally {
+      setTimeout(() => this.client?.close(), 100);
+    }
   }
 }
