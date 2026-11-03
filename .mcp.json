@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "wall": {
+      "command": "npx",
+      "args": ["tsx", "src/mcp/wall-server.ts"]
+    }
+  }
+}

@@ -67,3 +67,6 @@ out/
 recordings/*.jsonl
 !recordings/sample-*.jsonl
 test-results/
+
+.history/
+config/params.json

@@ -37,9 +37,26 @@ export interface WallFrame {
   events: WallEvent[];
 }
 
-/** ハブ ⇄ ブラウザ間でやりとりするメッセージ */
+/** 壁の画面への操作（壁サーバー → ハブ → ブラウザ） */
+export type WallAction =
+  | { action: "load"; id: string }
+  | { action: "back" }
+  | { action: "setParams"; id: string; values: Record<string, unknown> }
+  | { action: "stats" }
+  | { action: "games" }
+  | { action: "snapshot" }
+  | { action: "hit"; x: number; y: number }
+  | { action: "reload" };
+
+/** ハブ → ブラウザ */
 export type HubMessage =
   | { kind: "frame"; frame: WallFrame }
-  | { kind: "status"; sensor: "ok" | "lost" | "starting"; source: string; detail?: string };
+  | { kind: "status"; sensor: "ok" | "lost" | "starting"; source: string; detail?: string }
+  | ({ kind: "control"; reqId: number } & WallAction);
+
+/** ブラウザ → ハブ */
+export type ClientMessage =
+  | { kind: "hello"; role: "wall" | "draft" }
+  | { kind: "reply"; reqId: number; ok: boolean; data?: unknown; error?: string };
 
 export const HUB_PORT = 8787;

@@ -1,7 +1,7 @@
 // 壁の入力：ハブからの WebSocket と、マウス・タッチ（開発用の模擬入力）をまとめる。
 // 座標はピクセルに直して渡す。
 
-import { HUB_PORT, type HubMessage, type WallPoint } from "../../src/shared/protocol.ts";
+import { type ClientMessage, HUB_PORT, type HubMessage, type WallAction, type WallPoint } from "../../src/shared/protocol.ts";
 
 export interface Hit {
   id: number;
@@ -30,10 +30,14 @@ export class WallInput {
   private statusL = new Set<Listener<SensorStatus>>();
   private ws: WebSocket | null = null;
   private mouseId = -1;
+  /** 壁サーバーからの操作を受ける */
+  controlHandler: ((a: WallAction) => Promise<unknown> | unknown) | null = null;
 
   constructor(
     private readonly size: () => { width: number; height: number },
     private readonly el: HTMLElement,
+    /** wall＝壁に映す画面、draft＝検証用の画面（操作は受けない） */
+    private readonly role: "wall" | "draft" = "wall",
   ) {
     this.connect();
     this.bindMouse();
@@ -83,8 +87,23 @@ export class WallInput {
     const url = `ws://${location.hostname || "127.0.0.1"}:${HUB_PORT}`;
     const ws = new WebSocket(url);
     this.ws = ws;
+    const send = (m: ClientMessage) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(m));
+    ws.onopen = () => send({ kind: "hello", role: this.role });
     ws.onmessage = (ev) => {
       const m = JSON.parse(String(ev.data)) as HubMessage;
+      if (m.kind === "control") {
+        const { kind: _k, reqId, ...action } = m;
+        Promise.resolve()
+          .then(() => {
+            if (!this.controlHandler) throw new Error("操作を受け付けていません");
+            return this.controlHandler(action as WallAction);
+          })
+          .then(
+            (data) => send({ kind: "reply", reqId, ok: true, data }),
+            (e: unknown) => send({ kind: "reply", reqId, ok: false, error: e instanceof Error ? e.message : String(e) }),
+          );
+        return;
+      }
       if (m.kind === "status") {
         this.setStatus(m.sensor);
         return;

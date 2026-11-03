@@ -13,8 +13,10 @@
                          src/server/hub.ts  共通の形式(src/shared/protocol.ts)をWebSocketで配信
                                  ▼
                          web/  ブラウザ(TypeScript＋PixiJS)
-                               engine/ 遊びの枠と部品（動き・演出・音）
-                               games/  遊び（1遊び1ファイル。Claudeが書く場所）
+                               engine/ 遊びの枠と部品（動き・演出・音・キャラクター）
+                               games/  遊びの下書き（1遊び1ファイル。Claudeが書く場所）
+                               live/   壁に出してよい遊び（publish_game でだけ更新する。直接編集しない）
+                         src/mcp/wall-server.ts  壁サーバー（MCP）。Claudeが壁を扱う道具
 ```
 
 - 言語は TypeScript に統一する（入力側も Node.js で動かす）
@@ -22,9 +24,19 @@
 
 ## コマンド
 
-- `npm run dev` … 模擬センサー＋ハブ＋ブラウザを起動（http://localhost:5173）
+- `npm run dev` … 模擬センサー＋ハブ＋ブラウザを起動（壁の画面は http://127.0.0.1:5173）
 - `npm test` … 単体テスト（vitest）
 - `npm run typecheck` … 型チェック
+- `npm run verify -- <id> --draft` … 下書きの自動検証（エラー・FPS・スクリーンショット）
+- `npm run smoke` … 壁サーバーの通し確認
+
+## 遊びを作る・直す流れ（壁サーバーの道具を使う）
+
+1. `web/games/<id>.ts` に `defineGame` で書く（見本：`web/games/balloons.ts`、`animal-band.ts`）。部品は `web/engine/` から使う
+2. `verify_game` で確かめる。スクリーンショットも見て、子どもに分かりやすいか確認する
+3. `publish_game` で壁に出す（検証に通らなければ壁は変わらない）
+4. 「もっと大きく」「ゆっくり」などは、まず `set_params`。params にない変更は下書きを直して再び `publish_game`
+5. 「さっきのに戻して」は `rollback_game`（同じ遊びの前の版）か `previous_game`（前の遊び）
 
 ## 作業のルール
 
