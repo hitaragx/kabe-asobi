@@ -1,0 +1,27 @@
+{
+  "name": "kabe-asobi",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "concurrently -k -n hub,web \"tsx src/server/hub.ts --source sim\" \"vite\"",
+    "hub": "tsx src/server/hub.ts",
+    "web": "vite",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/ws": "^8.18.2",
+    "concurrently": "^10.0.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "pixi.js": "^8.22.0",
+    "ws": "^8.22.1"
+  }
+}

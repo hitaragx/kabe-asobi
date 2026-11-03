@@ -61,3 +61,9 @@ out/
 .cache/
 .parcel-cache/
 .turbo/
+
+# ===== kabe-asobi =====
+# 実データの記録は確認してから個別に追加する
+recordings/*.jsonl
+!recordings/sample-*.jsonl
+test-results/
