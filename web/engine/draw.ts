@@ -6,7 +6,7 @@ import { palette } from "./style.ts";
 export type Mood = "smile" | "happy" | "surprised" | "sleepy";
 
 /** 顔（目と口）。size は顔の幅の目安（ピクセル） */
-export function face(size: number, mood: Mood = "smile", ink: number = palette.ink): Container {
+export function face(size: number, mood: Mood = "smile", ink: number = palette.ink, withMouth = true): Container {
   const c = new Container();
   const eyeY = -size * 0.08;
   const eyeX = size * 0.2;
@@ -31,7 +31,8 @@ export function face(size: number, mood: Mood = "smile", ink: number = palette.i
   // ほっぺ
   const cheeks = new Graphics();
   for (const sx of [-1, 1]) cheeks.ellipse(sx * size * 0.33, size * 0.08, size * 0.07, size * 0.045).fill({ color: palette.pink, alpha: 0.7 });
-  c.addChild(cheeks, eyes, mouth);
+  c.addChild(cheeks, eyes);
+  if (withMouth) c.addChild(mouth);
   return c;
 }
 

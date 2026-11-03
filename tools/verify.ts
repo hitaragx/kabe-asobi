@@ -19,7 +19,8 @@ const { values: opts, positionals } = parseArgs({
     replay: { type: "string" },
     width: { type: "string", default: "1280" },
     height: { type: "string", default: "800" },
-    "min-fps": { type: "string", default: "45" },
+    // ヘッドレスはGPUを使わないので低めに出る。実機のChromeでは60が目安
+    "min-fps": { type: "string", default: "30" },
   },
 });
 
