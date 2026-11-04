@@ -63,9 +63,8 @@ out/
 .turbo/
 
 # ===== kabe-asobi =====
-# 実データの記録は確認してから個別に追加する
+# 記録はリポジトリに入れない（模擬の記録は tools/make-sample.ts で作り直せる）
 recordings/*.jsonl
-!recordings/sample-*.jsonl
 test-results/
 
 .history/
