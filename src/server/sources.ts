@@ -28,6 +28,8 @@ export interface RecordingHeader {
   source: string;
   /** 模擬センサーで記録した場合の正解の変換 */
   knownHomography?: Homography | null;
+  /** 模擬の記録だけ：本当に当たった時刻（Unixミリ秒）と位置（画面座標）。分析で拾えた割合を出すのに使う */
+  truth?: { t: number; x: number; y: number }[];
 }
 
 /** 模擬センサー：子どもたちがボールを投げ続ける場面をリアルタイムで作る */

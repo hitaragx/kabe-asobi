@@ -13,6 +13,7 @@ import { parseArgs } from "node:util";
 import { WebSocket, WebSocketServer } from "ws";
 import type { Homography } from "../input/calibration.ts";
 import { Calibrator, type CalibState, type CalibTarget } from "../input/calibrator.ts";
+import { DETECTOR_HELP, type DetectorOptions } from "../input/detector.ts";
 import { Pipeline } from "../input/pipeline.ts";
 import { type CalibView, type ClientMessage, HUB_PORT, type HubMessage, type WallAction } from "../shared/protocol.ts";
 import { Recorder } from "./recorder.ts";
@@ -21,6 +22,7 @@ import { LidarSource, ReplaySource, type ScanSource, SimSource } from "./sources
 
 const CALIBRATION_FILE = "config/calibration.json";
 const PARAMS_FILE = "config/params.json";
+const DETECTOR_FILE = "config/detector.json";
 const LOST_AFTER_MS = 500;
 
 const { values: args } = parseArgs({
@@ -83,6 +85,15 @@ async function main(): Promise<void> {
   if (!homography) log("hub.warn", { detail: "合わせ込みがまだです。/calibrate を実行してください" });
 
   const pipeline = new Pipeline(source.spec, { source: source.name, homography });
+  // 当たり検出の調整値（現場ごと）。ファイルがあれば読み込む
+  if (existsSync(DETECTOR_FILE)) {
+    try {
+      pipeline.detector.setOptions(JSON.parse(readFileSync(DETECTOR_FILE, "utf8")) as Partial<DetectorOptions>);
+      log("detector.load", { file: DETECTOR_FILE });
+    } catch (e) {
+      log("detector.load_error", { error: e instanceof Error ? e.message : String(e) });
+    }
+  }
   if ("onRestart" in source) source.onRestart = () => {
     log("detector.reset", { detail: "センサーにつなぎ直したので、背景を覚え直します" });
     pipeline.detector.resetBackground();
@@ -197,6 +208,28 @@ async function main(): Promise<void> {
         const r = await toWall(a);
         log("wall.action", { action: a.action, ok: r.ok, error: r.error });
         return json(200, r);
+      }
+      if (req.url === "/api/detector" && req.method === "GET")
+        return json(200, { options: pipeline.detector.options, help: DETECTOR_HELP, learning: pipeline.detector.isLearning });
+      if (req.url === "/api/detector" && req.method === "POST") {
+        const { values } = JSON.parse(await readBody(req)) as { values: Partial<DetectorOptions> };
+        const options = pipeline.detector.setOptions(values);
+        mkdirSync("config", { recursive: true });
+        // 既定と違う値だけを保存する
+        const saved = existsSync(DETECTOR_FILE) ? (JSON.parse(readFileSync(DETECTOR_FILE, "utf8")) as Record<string, unknown>) : {};
+        writeFileSync(DETECTOR_FILE, `${JSON.stringify({ ...saved, ...values }, null, 2)}\n`);
+        log("detector.set", { values });
+        return json(200, { ok: true, options });
+      }
+      if (req.url === "/api/detector/reset" && req.method === "POST") {
+        if (existsSync(DETECTOR_FILE)) writeFileSync(DETECTOR_FILE, "{}\n");
+        log("detector.reset", {});
+        return json(200, { ok: true, detail: "ファイルを空にしました。既定の値はハブの再起動で戻ります" });
+      }
+      if (req.url === "/api/detector/relearn" && req.method === "POST") {
+        pipeline.detector.resetBackground();
+        log("detector.relearn", {});
+        return json(200, { ok: true, detail: "約1秒、壁の前に誰もいない状態で背景を覚え直します" });
       }
       if (req.url === "/api/calibration" && req.method === "GET") return json(200, calibSummary());
       if (req.url === "/api/calibration/start" && req.method === "POST") {

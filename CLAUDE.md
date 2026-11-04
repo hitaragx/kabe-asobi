@@ -40,7 +40,7 @@
 
 ## Claude Code の仕組み（.claude/）
 
-- Skills：`new-game`（遊びを作る）、`calibrate`（壁への合わせ込み）、`tune`（遊んでいる最中に直す）
+- Skills：`new-game`（遊びを作る）、`calibrate`（壁への合わせ込み）、`tune`（遊んでいる最中に直す）、`sensor-tune`（記録を分析して当たり検出を調整する）
 - サブエージェント：`game-checker`（子どもの目線で遊びを確かめる。軽量モデル）
 - フック：web/live/ の直接編集と危ない操作（force push、強制削除など）を止める／遊びを編集したら型チェック
 - git のコミット前フック（.githooks/pre-commit）：APIキー・絶対パス・ユーザー名・禁止語を検出。禁止語リストは `~/.config/kabe-asobi/forbidden-words.txt`（リポジトリに入れない）

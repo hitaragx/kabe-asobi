@@ -71,3 +71,4 @@ test-results/
 .history/
 config/params.json
 config/calibration.json
+config/detector.json

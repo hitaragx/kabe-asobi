@@ -17,7 +17,7 @@ export interface SensorPose {
 }
 
 export interface SimObject {
-  kind: "ball" | "hand";
+  kind: "ball" | "hand" | "person" | "object";
   /** 壁の座標（メートル） */
   x: number;
   y: number;

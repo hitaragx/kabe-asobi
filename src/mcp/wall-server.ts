@@ -13,6 +13,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { HUB_PORT, type WallAction } from "../shared/protocol.ts";
+import { analyze, listRecordings, loadRecording } from "../input/analyze.ts";
 import { checkId, listGameFiles, publishFile, rollbackFile } from "../server/games.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -280,6 +281,90 @@ server.registerTool(
   "calibrate_cancel",
   { description: "合わせ込みをやめて、遊びの画面に戻す（前の合わせ込みの結果のまま）。" },
   async () => result(text(await hubPost("/api/calibration/cancel"))),
+);
+
+// ---- センサーの調整（当たり検出） ----
+
+server.registerTool(
+  "sensor_tuning",
+  {
+    description:
+      "当たり検出の調整値（いまハブで使っている値）と、それぞれの意味・上げ下げの目安を返す。値を変える前に必ず見る。",
+  },
+  async () => result(text(await hubGet("/api/detector"))),
+);
+
+server.registerTool(
+  "sensor_tuning_set",
+  {
+    description:
+      "当たり検出の調整値を変える（ハブを止めずにすぐ効き、config/detector.json に保存される）。変える前に analyze_recording で、記録を流して効果を数字で確かめること。一度に変えるのは1〜2個まで。",
+    inputSchema: {
+      values: z
+        .record(z.string(), z.union([z.number(), z.array(z.object({ x0: z.number(), y0: z.number(), x1: z.number(), y1: z.number() }))]))
+        .describe("例：{ clusterGap: 0.12, lostMs: 100 }、無視する場所は { ignoreRects: [{x0,y0,x1,y1}] }"),
+    },
+  },
+  async ({ values }) => {
+    const r = await hubPost("/api/detector", { values });
+    return r.ok ? result(text(r)) : fail(r.error ?? "変えられませんでした");
+  },
+);
+
+server.registerTool(
+  "sensor_relearn",
+  {
+    description: "何もない状態の距離（背景）を覚え直す。センサーや家具を動かしたあとに使う。職員に「壁の前から1秒だけ離れてください」と伝えてから呼ぶ。",
+  },
+  async () => result(text(await hubPost("/api/detector/relearn"))),
+);
+
+server.registerTool(
+  "list_recordings",
+  { description: "記録したセンサーのデータ（recordings/*.jsonl）の一覧。" },
+  async () => result(text(listRecordings())),
+);
+
+server.registerTool(
+  "analyze_recording",
+  {
+    description: `記録を、指定した調整値で流し直して数える（壁や遊びには影響しない）。返す値：
+- downs：遊びに届く当たりの数（画面の中）。downsAll はセンサーが拾った全部
+- truth：模擬の記録だけ。投げた数・拾えた数・割合（recall）・余計に数えた数（extraDowns）・ずれ（cm）
+- quietFalseDowns：背景を覚えたあと quietSec 秒の間（誰もいないはず）の当たり＝誤反応
+- suspectedDoubles：150ms 以内・15cm 以内に続いた当たり＝1回を二重に数えた疑い
+- durationsMs：当たりの続いた時間の分布（ボールは50〜150ms、手のタッチは数百ms〜）
+- widthM：物の幅（ボール約0.07m、手0.05〜0.1m、人の体0.2m〜）
+- lingering：3秒以上居座った物（家具・人・カーテンの疑い。ignoreRects の候補）
+- hotspots：当たりが集中した場所（センサー座標の升目）
+values を省くと、いまの調整値で数える。`,
+    inputSchema: {
+      file: z.string().describe("recordings/ の下のファイル"),
+      values: z.record(z.string(), z.unknown()).optional().describe("試したい調整値（いまの値に上書き）"),
+      quietSec: z.number().optional().describe("背景を覚えたあと、誰もいなかった秒数"),
+      fromSec: z.number().optional(),
+      toSec: z.number().optional(),
+    },
+  },
+  async ({ file, values, quietSec, fromSec, toSec }) => {
+    if (!/^recordings\/[\w.-]+\.jsonl$/.test(file)) return fail("recordings/ の下の .jsonl を指定してください");
+    const rec = await loadRecording(file);
+    const current = (await hubGet("/api/detector").catch(() => null))?.options ?? {};
+    let homography = null;
+    try {
+      homography = JSON.parse(readFileSync("config/calibration.json", "utf8")).homography;
+    } catch {
+      // 合わせ込みがまだなら、模擬の記録の正解の変換を使う（なければ画面の判定はしない）
+    }
+    const a = analyze(rec, {
+      detector: { ...current, ...(values as object) },
+      homography,
+      quietMs: quietSec ? quietSec * 1000 : undefined,
+      fromSec,
+      toSec,
+    });
+    return result(text(a));
+  },
 );
 
 await server.connect(new StdioServerTransport());

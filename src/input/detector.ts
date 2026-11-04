@@ -20,16 +20,39 @@ export interface DetectorOptions {
   trackGate: number;
   /** 見えなくなってから「離れた」とみなすまでの時間（ミリ秒） */
   lostMs: number;
+  /** この距離より近い・遠い点は無視する（メートル。0 なら制限なし） */
+  minDistance: number;
+  maxDistance: number;
+  /** 無視する場所（センサー座標の長方形、メートル）。家具・カーテン・柱など */
+  ignoreRects: { x0: number; y0: number; x1: number; y1: number }[];
 }
+
+/** 調整できる値の説明（壁サーバーの道具で Claude に見せる） */
+export const DETECTOR_HELP: Record<keyof DetectorOptions, string> = {
+  backgroundScans: "背景を覚えるのに使うスキャンの数（40で約1秒）",
+  foregroundThresholdMm: "背景よりこれ以上手前なら物とみなす（mm）。ノイズで誤反応するなら上げる。壁に近いボールを拾えないなら下げる",
+  clusterGap: "隣の点とこれ以内なら同じ物（m）",
+  minPoints: "1つの物として認める最小の点の数。小さいノイズを拾うなら上げる。遠くのボールを拾えないなら下げる",
+  maxWidth: "1つの物として認める最大の幅（m）。人の体や家具を拾うなら下げる",
+  trackGate: "前のスキャンの物と同じとみなす距離（m）。速く動く物が二重に数えられるなら上げる",
+  lostMs: "見えなくなってから離れたとみなすまで（ms）。1回の当たりが2回に数えられるなら上げる",
+  minDistance: "これより近い点は無視（m、0で制限なし）",
+  maxDistance: "これより遠い点は無視（m、0で制限なし）。壁の外の部屋の物を拾うときに使う",
+  ignoreRects: "無視する長方形（センサー座標 m の x0,y0,x1,y1）。家具・カーテンなど",
+};
 
 export const DEFAULT_DETECTOR: DetectorOptions = {
   backgroundScans: 40,
   foregroundThresholdMm: 60,
-  clusterGap: 0.06,
+  // 本物のセンサーの誤差（±4cm程度）でも1つの物が分かれないよう、少し広めにする
+  clusterGap: 0.1,
   minPoints: 3,
   maxWidth: 0.4,
   trackGate: 0.25,
   lostMs: 60,
+  minDistance: 0,
+  maxDistance: 0,
+  ignoreRects: [],
 };
 
 export interface Blob {
@@ -48,6 +71,9 @@ export interface Track {
   firstSeen: number;
   lastSeen: number;
   conf: number;
+  /** 直近のまとまりの幅（m）と点の数 */
+  width: number;
+  points: number;
 }
 
 export interface DetectorEvent {
@@ -67,7 +93,7 @@ export interface DetectorResult {
 }
 
 export class Detector {
-  private readonly opts: DetectorOptions;
+  private opts: DetectorOptions;
   private bgSamples: number[][] = [];
   private background: number[] | null = null;
   private tracks: Track[] = [];
@@ -78,6 +104,29 @@ export class Detector {
     opts: Partial<DetectorOptions> = {},
   ) {
     this.opts = { ...DEFAULT_DETECTOR, ...opts };
+  }
+
+  get options(): DetectorOptions {
+    return structuredClone(this.opts);
+  }
+
+  /** 値を変える（ハブを止めずに）。知らない名前や範囲外の値はエラー */
+  setOptions(values: Partial<DetectorOptions>): DetectorOptions {
+    const next = { ...this.opts };
+    for (const [k, v] of Object.entries(values)) {
+      if (!(k in DEFAULT_DETECTOR)) throw new Error(`知らない値です: ${k}`);
+      if (k === "ignoreRects") {
+        if (!Array.isArray(v) || !v.every((r) => ["x0", "y0", "x1", "y1"].every((q) => Number.isFinite((r as Record<string, number>)[q]))))
+          throw new Error("ignoreRects は {x0,y0,x1,y1} の配列で指定してください");
+        next.ignoreRects = v as DetectorOptions["ignoreRects"];
+      } else {
+        const n = Number(v);
+        if (!Number.isFinite(n) || n < 0) throw new Error(`${k} は0以上の数で指定してください`);
+        (next as unknown as Record<string, number>)[k] = n;
+      }
+    }
+    this.opts = next;
+    return this.options;
   }
 
   get isLearning(): boolean {
@@ -115,7 +164,16 @@ export class Detector {
   }
 
   private findBlobs(ranges: number[], bg: number[]): Blob[] {
-    const { foregroundThresholdMm, clusterGap, minPoints, maxWidth } = this.opts;
+    const { foregroundThresholdMm, clusterGap, minPoints, maxWidth, minDistance, maxDistance, ignoreRects } = this.opts;
+    const ignored = (p: { x: number; y: number }) => {
+      const d = Math.hypot(p.x, p.y);
+      if (minDistance > 0 && d < minDistance) return true;
+      if (maxDistance > 0 && d > maxDistance) return true;
+      for (const r of ignoreRects) {
+        if (p.x >= Math.min(r.x0, r.x1) && p.x <= Math.max(r.x0, r.x1) && p.y >= Math.min(r.y0, r.y1) && p.y <= Math.max(r.y0, r.y1)) return true;
+      }
+      return false;
+    };
     const blobs: Blob[] = [];
     let cur: { x: number; y: number }[] = [];
     let last: { x: number; y: number } | null = null;
@@ -161,6 +219,10 @@ export class Detector {
       }
       gapSteps = 0;
       const p = toSensorXY(this.spec, i, r);
+      if (ignored(p)) {
+        flush();
+        continue;
+      }
       if (last && Math.hypot(p.x - last.x, p.y - last.y) > clusterGap) flush();
       cur.push(p);
       last = p;
@@ -201,6 +263,8 @@ export class Detector {
       tr.y = b.y;
       tr.lastSeen = t;
       tr.conf = Math.min(1, tr.conf + 0.25);
+      tr.width = b.width;
+      tr.points = b.points;
     }
 
     // 見えなくなった物体
@@ -215,7 +279,7 @@ export class Detector {
     // 新しく現れた物体 = 当たった・触れた瞬間
     for (const bi of unmatched) {
       const b = blobs[bi]!;
-      const tr: Track = { id: this.nextId++, x: b.x, y: b.y, vx: 0, vy: 0, firstSeen: t, lastSeen: t, conf: 0.5 };
+      const tr: Track = { id: this.nextId++, x: b.x, y: b.y, vx: 0, vy: 0, firstSeen: t, lastSeen: t, conf: 0.5, width: b.width, points: b.points };
       this.tracks.push(tr);
       events.push({ type: "down", id: tr.id, x: tr.x, y: tr.y });
     }
