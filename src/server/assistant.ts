@@ -105,6 +105,20 @@ export class ClaudeAssistant implements Assistant {
         },
       });
       for await (const m of q) {
+        if (m.type === "system" && m.subtype === "init") {
+          // 何が読み込まれたかを記録する（壁サーバー・Skills・サブエージェントがそろっているか）
+          console.error(
+            JSON.stringify({
+              msg: "assistant.init",
+              model: m.model,
+              mcp: m.mcp_servers,
+              skills: (m as { skills?: unknown }).skills,
+              agents: (m as { agents?: unknown }).agents,
+              permissionMode: m.permissionMode,
+              apiKeySource: m.apiKeySource,
+            }),
+          );
+        }
         if (m.type === "stream_event") {
           // サブエージェントの文字は出さない（親の返事だけ）
           if (m.parent_tool_use_id) continue;
