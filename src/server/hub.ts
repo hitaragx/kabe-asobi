@@ -318,7 +318,7 @@ async function main(): Promise<void> {
     if (!frame) return;
     frames++;
     downs += frame.events.filter((e) => e.type === "down").length;
-    broadcast({ kind: "frame", frame });
+    broadcast({ kind: "frame", frame: { ...frame, t_sent: Date.now() } });
   });
 
   // センサーが止まったら知らせる（画面は待機状態に戻る）

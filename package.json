@@ -18,7 +18,8 @@
     "smoke:calib": "tsx tools/calib-smoke.ts",
     "phone": "tsx src/server/phone.ts",
     "smoke:phone": "tsx tools/phone-smoke.ts",
-    "dev:lidar": "concurrently -k -n hub,wall,phone \"tsx src/server/hub.ts --source lidar\" \"vite\" \"tsx src/server/phone.ts\""
+    "dev:lidar": "concurrently -k -n hub,wall,phone \"tsx src/server/hub.ts --source lidar\" \"vite\" \"tsx src/server/phone.ts\"",
+    "latency": "tsx tools/latency.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

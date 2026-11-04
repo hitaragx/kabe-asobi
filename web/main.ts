@@ -99,6 +99,17 @@ declare global {
     __kabe: unknown;
   }
 }
+const pct = (v: number[], q: number) => {
+  if (!v.length) return null;
+  const s = [...v].sort((a, b) => a - b);
+  return s[Math.min(s.length - 1, Math.floor(s.length * q))]!;
+};
+/** 遅れの内訳（p50 と p95、ミリ秒） */
+const latency = () => {
+  const xs = input.latencySamples;
+  const part = (k: "hub" | "net" | "frame" | "total") => ({ p50: pct(xs.map((x) => x[k]), 0.5), p95: pct(xs.map((x) => x[k]), 0.95) });
+  return { n: xs.length, hub: part("hub"), net: part("net"), frame: part("frame"), total: part("total") };
+};
 const stats = () => ({
   game: runtime.current?.def.id ?? null,
   mode: draft ? "draft" : "wall",
@@ -110,6 +121,7 @@ const stats = () => ({
   objects: app.stage.children.reduce((n, c) => n + 1 + c.children.length, 0),
   fxObjects: runtime.fxLayer.children.length,
   latencyMs: input.latencies.length ? [...input.latencies].sort((a, b) => a - b)[Math.floor(input.latencies.length / 2)] : null,
+  latency: latency(),
   size: { width: app.screen.width, height: app.screen.height },
 });
 const games = () =>

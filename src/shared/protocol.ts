@@ -33,6 +33,8 @@ export interface WallFrame {
   seq: number;
   /** センサーが取得した時刻（Unixミリ秒） */
   t_capture: number;
+  /** ハブが送り出した時刻（Unixミリ秒）。遅れの内訳を測るのに使う */
+  t_sent?: number;
   points: WallPoint[];
   events: WallEvent[];
 }

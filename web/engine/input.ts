@@ -11,6 +11,20 @@ export interface Hit {
   source: string;
   /** センサーが取得した時刻（Unixミリ秒）。遅延の計測に使う */
   t: number;
+  /** ハブが送り出した時刻（Unixミリ秒） */
+  tSent?: number;
+}
+
+/** 1回の「当たり」の遅れの内訳（ミリ秒） */
+export interface LatencySample {
+  /** スキャン受信 → ハブが送り出すまで（当たり検出・座標変換） */
+  hub: number;
+  /** ハブ → ブラウザの遊びに届くまで（WebSocket） */
+  net: number;
+  /** 遊びに届く → 反応を描いた画面ができるまで（次の描画） */
+  frame: number;
+  /** スキャン受信 → 画面ができるまでの合計 */
+  total: number;
 }
 
 export type SensorStatus = "connecting" | "starting" | "ok" | "lost";
@@ -22,8 +36,10 @@ export class WallInput {
   /** いま壁に触れている点（ピクセル座標） */
   points: (WallPoint & { px: number; py: number })[] = [];
   lastInputAt = performance.now();
-  /** 遅延（ミリ秒）の直近の記録 */
+  /** 遅延（ミリ秒、スキャン受信 → 遊びに届く）の直近の記録 */
   latencies: number[] = [];
+  /** 遅れの内訳の直近の記録 */
+  latencySamples: LatencySample[] = [];
 
   private downL = new Set<Listener<Hit>>();
   private upL = new Set<Listener<Hit>>();
@@ -74,8 +90,16 @@ export class WallInput {
   private emitDown(h: Hit): void {
     this.lastInputAt = performance.now();
     if (h.source !== "mouse" && h.source !== "inject") {
-      this.latencies.push(Date.now() - h.t);
+      const now = Date.now();
+      this.latencies.push(now - h.t);
       if (this.latencies.length > 100) this.latencies.shift();
+      // 反応を描いた画面ができる時刻は、次の描画の呼び出しで測る（PixiJS も同じ呼び出しで描く）
+      requestAnimationFrame(() => {
+        const painted = Date.now();
+        const sent = h.tSent ?? h.t;
+        this.latencySamples.push({ hub: sent - h.t, net: now - sent, frame: painted - now, total: painted - h.t });
+        if (this.latencySamples.length > 200) this.latencySamples.shift();
+      });
     }
     for (const f of this.downL) f(h);
   }
@@ -113,7 +137,7 @@ export class WallInput {
       const f = m.frame;
       this.points = f.points.map((p) => ({ ...p, px: p.x * width, py: p.y * height }));
       for (const e of f.events) {
-        const hit = { id: e.id, x: e.x * width, y: e.y * height, source: f.source, t: f.t_capture };
+        const hit = { id: e.id, x: e.x * width, y: e.y * height, source: f.source, t: f.t_capture, tSent: f.t_sent };
         if (e.type === "down") this.emitDown(hit);
         else this.emitUp(hit);
       }
