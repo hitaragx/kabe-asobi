@@ -180,10 +180,12 @@ function noise(ms: number, gain = 0.3, opts: { highpass?: number; lowpass?: numb
 
 /** 遊びから使う効果音 */
 export const sound = {
-  /** 風船がわれる（「ぽんっ」と丸い音。耳に痛い高い音は入れない） */
+  /** 風船がわれる（「パンッ」と歯切れよく。ただし耳に刺さる高すぎる音は削る） */
   pop(): void {
-    noise(90, 0.28, { highpass: 400, lowpass: 2600, attackMs: 3, sweepTo: 800 });
-    tone({ type: "sine", from: 700, to: 220, ms: 120, gain: 0.5 });
+    // はじける瞬間（短く明るい）＋ 余韻（少し低い）＋「ぽん」という芯
+    noise(35, 0.42, { highpass: 900, lowpass: 6000, attackMs: 1 });
+    noise(110, 0.22, { highpass: 400, lowpass: 3200, attackMs: 2, sweepTo: 900 });
+    tone({ type: "triangle", from: 900, to: 260, ms: 100, gain: 0.45 });
   },
   /** 当たり・正解 */
   ding(pitch = 1): void {
