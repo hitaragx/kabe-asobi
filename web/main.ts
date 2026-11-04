@@ -144,7 +144,7 @@ input.controlHandler = async (a) => {
       return true;
     case "snapshot":
       // 壁に映っている画面そのものを、軽いJPEGで返す
-      return await app.renderer.extract.base64({ target: app.stage, resolution: 0.5, format: "jpg", quality: 0.8 });
+      return await app.renderer.extract.base64({ target: app.stage, frame: app.screen.clone(), resolution: 0.5, format: "jpg", quality: 0.8 });
     case "calibration":
       calibView.set(a.view);
       return true;

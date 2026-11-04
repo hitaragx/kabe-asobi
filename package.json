@@ -15,7 +15,9 @@
     "sensor:check": "tsx tools/sensor-check.ts",
     "record": "tsx tools/record.ts",
     "fake-sensor": "tsx tools/fake-scip.ts",
-    "smoke:calib": "tsx tools/calib-smoke.ts"
+    "smoke:calib": "tsx tools/calib-smoke.ts",
+    "phone": "tsx src/server/phone.ts",
+    "smoke:phone": "tsx tools/phone-smoke.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
@@ -28,6 +30,7 @@
     "vitest": "^5.1.0"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.318",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "pixi.js": "^8.22.0",
     "ws": "^8.22.1",

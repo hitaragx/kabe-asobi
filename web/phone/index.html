@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>かべあそび</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>かべあそび <span id="mode" class="badge" hidden>仮</span></h1>
+    <div class="status">
+      <span id="st-sensor"><i class="dot"></i>センサー</span>
+      <span id="st-wall"><i class="dot"></i>かべ</span>
+    </div>
+  </header>
+
+  <div class="wall" id="wall">
+    <img id="wall-img" alt="壁の今の画面" />
+    <div class="label" id="wall-title">—</div>
+    <div class="live">いま</div>
+    <div class="wall-empty" id="wall-empty" hidden>壁の画面が開いていません</div>
+  </div>
+
+  <div class="actions">
+    <button id="btn-back"><span>↩︎</span>さっきのに戻す</button>
+    <button id="btn-calib"><span>🎯</span>壁に合わせる</button>
+    <button id="btn-games"><span>🧩</span>遊びをえらぶ</button>
+  </div>
+
+  <div class="chat" id="chat"></div>
+
+  <div class="suggest" id="suggest">
+    <button>もっと大きく</button>
+    <button>ゆっくりに</button>
+    <button>点数はいらない</button>
+    <button>的を下の方に</button>
+    <button>さっきのに戻して</button>
+  </div>
+
+  <form class="input" id="form">
+    <button type="button" class="mic" id="mic" aria-label="話して頼む">🎤</button>
+    <input id="text" placeholder="こんな遊びにしたい…" autocomplete="off" enterkeyhint="send" />
+    <button type="submit" id="send" aria-label="送る">➤</button>
+  </form>
+
+  <!-- 下から出る板：遊びの一覧・合わせ込み -->
+  <div class="sheet-bg" id="sheet-bg" hidden></div>
+  <div class="sheet" id="sheet" hidden>
+    <div class="sheet-head"><b id="sheet-title"></b><button id="sheet-close">とじる</button></div>
+    <div id="sheet-body"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
