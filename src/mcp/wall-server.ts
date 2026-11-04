@@ -197,6 +197,34 @@ server.registerTool(
 );
 
 server.registerTool(
+  "set_zones",
+  {
+    description:
+      "壁を区画に分けて、区画ごとに的の大きさ・速さを変える（「小さい子の側だけ大きく・ゆっくり」「下の方は車いすの子用に大きく」など）。座標は 0〜1（左上が原点）。区画は壁に点線と名前で表示される。zones を空の配列にすると区画をやめる。値は保存される。",
+    inputSchema: {
+      id: z.string().describe("遊びのID"),
+      zones: z
+        .array(
+          z.object({
+            x0: z.number().min(0).max(1),
+            y0: z.number().min(0).max(1),
+            x1: z.number().min(0).max(1),
+            y1: z.number().min(0).max(1),
+            size: z.number().min(0.3).max(3).optional().describe("大きさの倍率"),
+            speed: z.number().min(0).max(3).optional().describe("速さの倍率"),
+            label: z.string().max(20).optional().describe("壁に出す名前（例：ちいさい子）"),
+          }),
+        )
+        .describe("例：[{x0:0,y0:0,x1:0.5,y1:1,size:1.5,speed:0.6,label:'ちいさい子'},{x0:0.5,y0:0,x1:1,y1:1,label:'おおきい子'}]"),
+    },
+  },
+  async ({ id, zones }) => {
+    const r = await wall({ action: "setParams", id, values: { zones } });
+    return r.ok ? result(text({ ok: true, zones })) : fail(r.error ?? "設定できませんでした");
+  },
+);
+
+server.registerTool(
   "reset_params",
   { description: "set_params で変えた値を消して、遊びのファイルに書いてある値に戻す。", inputSchema: { id: z.string() } },
   async ({ id }) => {

@@ -44,6 +44,7 @@ function stepText(tool: string): string | null {
     mcp__wall__previous_game: "前の遊びに戻しています",
     mcp__wall__show_game: "遊びを切り替えています",
     mcp__wall__set_params: "調整しています",
+    mcp__wall__set_zones: "壁を区画に分けています",
     mcp__wall__reset_params: "元の設定に戻しています",
     mcp__wall__wall_screenshot: "壁を見ています",
     mcp__wall__wall_status: "壁の様子を見ています",

@@ -19,6 +19,8 @@ const { values: opts, positionals } = parseArgs({
     seconds: { type: "string", default: "8" },
     replay: { type: "string" },
     draft: { type: "boolean", default: false },
+    /** 調整値を入れた状態で確かめる（JSON。例：{"zones":[...]}） */
+    params: { type: "string" },
     width: { type: "string", default: "1280" },
     height: { type: "string", default: "800" },
     // ヘッドレスはGPUを使わないので低めに出る。実機のChromeでは60が目安
@@ -92,7 +94,13 @@ async function main(): Promise<void> {
 
   for (const id of targets) {
     consoleErrors.length = 0;
-    const loaded = await page.evaluate((gid) => (window as any).__kabe.load(gid), id);
+    let loaded = await page.evaluate((gid) => (window as any).__kabe.load(gid), id);
+    if (opts.params) {
+      await page.evaluate(([gid, v]) => (window as any).__kabe.setParams(gid, JSON.parse(v as string)), [id, opts.params]);
+      loaded = (await page.evaluate(() => (window as any).__kabe.stats())).game === id;
+    }
+    // 前の遊びの演出が残っていないか（切り替えた直後は空のはず）
+    const leftover = ((await page.evaluate(() => (window as any).__kabe.stats())) as { fxObjects: number }).fxObjects;
     await page.waitForTimeout(1500);
     await page.screenshot({ path: `test-results/${id}-start.png` });
 
@@ -110,6 +118,7 @@ async function main(): Promise<void> {
     const gameErrors = after.errors.filter((e) => e.game === id);
     const problems: string[] = [];
     for (const le of after.loadErrors.filter((e) => e.file.endsWith(`/${id}.ts`))) problems.push(`読み込みエラー: ${le.message}`);
+    if (leftover > 0) problems.push(`前の遊びの演出が ${leftover} 個残っています`);
     if (!known.has(id)) problems.push("遊びが登録されていません（ファイル名・id・export default を確認）");
     else if (!loaded) problems.push("読み込めませんでした");
     if (after.game !== id) problems.push(`別の遊びに戻されました（${after.game}）`);

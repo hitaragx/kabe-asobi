@@ -32,11 +32,11 @@ export default defineGame({
     let total = 0;
     if (params.showCount) ctx.setScore("みんなで 0");
 
-    type Oni = { c: Container; face: Container; vx: number; stop: () => void };
+    type Oni = { c: Container; face: Container; vx: number; r: number; stop: () => void };
     const onis = new Set<Oni>();
     const colors = [ctx.colors.red, ctx.colors.blue, ctx.colors.green, ctx.colors.orange, ctx.colors.purple];
 
-    const makeOni = (color: number): { c: Container; face: Container } => {
+    const makeOni = (color: number, r: number): { c: Container; face: Container } => {
       const c = new Container();
       const horn = color === ctx.colors.yellow ? ctx.colors.white : ctx.colors.yellow;
       // つの
@@ -77,20 +77,26 @@ export default defineGame({
 
     const spawn = () => {
       if (onis.size >= params.count) return;
-      const { c, face: f } = makeOni(colors[Math.floor(ctx.random() * colors.length)]!);
       const fromLeft = ctx.random() < 0.5;
-      c.x = r * 1.5 + ctx.random() * (width - r * 3);
-      c.y = top + ctx.random() * (bottom - top);
+      const x = r * 1.5 + ctx.random() * (width - r * 3);
+      const y = top + ctx.random() * (bottom - top);
+      // 区画（「小さい子の側は大きくゆっくり」など）に合わせ、鬼はその区画の中だけを歩く
+      const z = ctx.zone(x, y);
+      const rr = r * z.size;
+      const area = ctx.zoneRect(x, y);
+      const { c, face: f } = makeOni(colors[Math.floor(ctx.random() * colors.length)]!, rr);
+      c.x = Math.min(Math.max(x, area.x0 + rr * 1.3), area.x1 - rr * 1.3);
+      c.y = y;
       ctx.stage.addChild(c);
       void ctx.motion.popIn(c, 450);
-      const oni: Oni = { c, face: f, vx: (fromLeft ? 1 : -1) * unit * (5 + ctx.random() * 4) * params.speed, stop: () => {} };
+      const oni: Oni = { c, face: f, r: rr, vx: (fromLeft ? 1 : -1) * unit * (5 + ctx.random() * 4) * params.speed * z.speed, stop: () => {} };
       const y0 = c.y;
       const phase = ctx.random() * Math.PI * 2;
       oni.stop = ctx.motion.loop((dt, time) => {
         if (c.destroyed) return false;
         c.x += (oni.vx * dt) / 1000;
-        if (c.x < r * 1.3) oni.vx = Math.abs(oni.vx);
-        if (c.x > width - r * 1.3) oni.vx = -Math.abs(oni.vx);
+        if (c.x < area.x0 + rr * 1.3) oni.vx = Math.abs(oni.vx);
+        if (c.x > area.x1 - rr * 1.3) oni.vx = -Math.abs(oni.vx);
         // てくてく歩く
         c.y = y0 - Math.abs(Math.sin(time / 300 + phase)) * unit * 1.5;
         c.rotation = Math.sin(time / 300 + phase) * 0.06;
@@ -112,7 +118,7 @@ export default defineGame({
       let bestD = Infinity;
       for (const o of onis) {
         const d = Math.hypot(hit.x - o.c.x, hit.y - o.c.y);
-        if (d < bestD && ctx.near(hit, o.c, r * 1.2)) {
+        if (d < bestD && ctx.near(hit, o.c, o.r * 1.2)) {
           best = o;
           bestD = d;
         }
@@ -127,13 +133,13 @@ export default defineGame({
       o.stop();
       o.c.rotation = 0;
       // びっくり顔に変える
-      const f2 = face(r * 1.3, "surprised");
+      const f2 = face(o.r * 1.3, "surprised");
       f2.position.copyFrom(o.face.position);
       o.face.destroy({ children: true });
       o.c.addChild(f2);
       ctx.sound.boing();
       ctx.fx.burst(o.c.x, o.c.y, { color: 0xf3d9a4, count: 14 }); // まめ
-      ctx.fx.popText(o.c.x, o.c.y - r * 1.4, "おにはそと！");
+      ctx.fx.popText(o.c.x, o.c.y - o.r * 1.4, "おにはそと！");
       total++;
       if (params.showCount) ctx.setScore(`みんなで ${total}`);
       if (total % 10 === 0) {
@@ -145,7 +151,7 @@ export default defineGame({
       void ctx.motion.hop(o.c, unit * 6, 400).then(async () => {
         if (o.c.destroyed) return;
         ctx.sound.whoosh();
-        const toX = o.c.x < width / 2 ? -r * 3 : width + r * 3;
+        const toX = o.c.x < width / 2 ? -o.r * 3 : width + o.r * 3;
         await ctx.motion.to(o.c, { x: toX }, 700);
         if (!o.c.destroyed) o.c.destroy({ children: true });
       });

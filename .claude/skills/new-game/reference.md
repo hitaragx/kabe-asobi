@@ -21,6 +21,8 @@ export default defineGame({
 | `onHit(f)` / `onRelease(f)` | 当たった・離れた。`hit.x, hit.y` はピクセル |
 | `touching()` | いま触れている点 |
 | `near(hit, obj, r, slack=3)` | 当たりが物の近くか（子ども向けに少し甘め） |
+| `zone(x, y)` | その場所の区画の倍率 `{ size, speed, label }`。的を作るときに掛ける（区画がなければ 1） |
+| `zoneRect(x, y)` | その場所の区画の範囲（ピクセル）。動く的をこの中だけで動かす |
 | `every(ms, f)` / `after(ms, f)` | くり返し・あとで |
 | `random()` / `pick(arr)` | 乱数 |
 | `setScore(text \| null)` | 上に点数などを出す |

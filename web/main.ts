@@ -108,6 +108,7 @@ const stats = () => ({
   loadErrors,
   history: runtime.history,
   objects: app.stage.children.reduce((n, c) => n + 1 + c.children.length, 0),
+  fxObjects: runtime.fxLayer.children.length,
   latencyMs: input.latencies.length ? [...input.latencies].sort((a, b) => a - b)[Math.floor(input.latencies.length / 2)] : null,
   size: { width: app.screen.width, height: app.screen.height },
 });
@@ -122,7 +123,7 @@ const games = () =>
     params: Object.fromEntries(Object.entries(g.params).map(([k, p]) => [k, { label: p.label, value: p.value, min: p.min, max: p.max }])),
   }));
 
-const calibView = new CalibrationView(app, [runtime.gameLayer, runtime.fxLayer, runtime.uiLayer]);
+const calibView = new CalibrationView(app, [runtime.gameLayer, runtime.zoneLayer, runtime.fxLayer, runtime.uiLayer]);
 
 input.controlHandler = async (a) => {
   switch (a.action) {

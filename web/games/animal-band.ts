@@ -31,15 +31,18 @@ export default defineGame({
     const kinds = ["bear", "cat", "chick", "ghost"];
     const n = Math.round(params.animals);
     const size = Math.min((width / n) * 0.75, unit * 30) * params.size;
-    const band: { ch: Character; note: number; busy: boolean }[] = [];
+    const band: { ch: Character; note: number; busy: boolean; size: number }[] = [];
     for (let i = 0; i < n; i++) {
-      const ch = makeCharacter(kinds[i % kinds.length]!, size, ctx.line);
-      ch.x = ((i + 0.5) / n) * width;
-      ch.y = groundY + size * 0.04; // 足元を地面に少しめり込ませる
+      const x = ((i + 0.5) / n) * width;
+      // 区画（「小さい子の側は大きく」など）に合わせる。並びからはみ出さないよう 1.3 倍まで
+      const s = size * Math.min(1.3, ctx.zone(x, groundY - size * 0.5).size);
+      const ch = makeCharacter(kinds[i % kinds.length]!, s, ctx.line);
+      ch.x = x;
+      ch.y = groundY + s * 0.04; // 足元を地面に少しめり込ませる
       ctx.stage.addChild(ch);
       void ctx.motion.popIn(ch, 500 + i * 120);
       cm.idle(ch);
-      band.push({ ch, note: i * 2, busy: false });
+      band.push({ ch, note: i * 2, busy: false, size: s });
     }
 
     // ときどき誰かが手を振って「当ててね」と誘う
@@ -50,18 +53,18 @@ export default defineGame({
 
     ctx.onHit((hit) => {
       // キャラクターの中心は足元から体の高さの半分ほど上
-      const target = band.find((m) => ctx.near(hit, { x: m.ch.x, y: m.ch.y - size * 0.5 }, size * 0.6));
+      const target = band.find((m) => ctx.near(hit, { x: m.ch.x, y: m.ch.y - m.size * 0.5 }, m.size * 0.6));
       if (!target) {
         ctx.fx.ripple(hit.x, hit.y, { radius: 6 });
         ctx.sound.miss();
         return;
       }
       ctx.sound.note(target.note);
-      ctx.fx.burst(target.ch.x, target.ch.y - size, { count: 10, size: 0.8 });
-      ctx.fx.popText(target.ch.x, target.ch.y - size * 1.2, "♪", { color: ctx.colors.white, size: 10 });
+      ctx.fx.burst(target.ch.x, target.ch.y - target.size, { count: 10, size: 0.8 });
+      ctx.fx.popText(target.ch.x, target.ch.y - target.size * 1.2, "♪", { color: ctx.colors.white, size: 10 });
       if (target.busy) return;
       target.busy = true;
-      void cm.joy(target.ch, size * 0.35).then(() => {
+      void cm.joy(target.ch, target.size * 0.35).then(() => {
         target.busy = false;
       });
     });

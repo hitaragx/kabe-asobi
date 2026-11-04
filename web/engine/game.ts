@@ -30,6 +30,22 @@ export interface Param<T extends number | string | boolean = number | string | b
 }
 
 export type Params = Record<string, Param>;
+
+/**
+ * 壁の区画（職員の「小さい子の側だけ大きく」など）。座標は 0〜1（左上が原点）。
+ * 区画は遊びをまたいで同じ形式で、壁サーバーの set_zones で設定する。
+ */
+export interface Zone {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  /** 大きさ・速さの倍率（1 がそのまま） */
+  size?: number;
+  speed?: number;
+  /** 壁に小さく出す名前（例：「ちいさい子」） */
+  label?: string;
+}
 type Values<P extends Params> = { [K in keyof P]: P[K]["value"] };
 
 export interface GameContext<P extends Params = Params> {
@@ -58,6 +74,13 @@ export interface GameContext<P extends Params = Params> {
   onRelease(f: (hit: Hit) => void): void;
   /** いま壁に触れている点 */
   touching(): { x: number; y: number; id: number }[];
+  /**
+   * その場所の区画の倍率。的を出すときの大きさ・速さに掛ける。区画がなければ size=1, speed=1。
+   * 区画に対応する遊びは、的を作るたびにこれを使う。
+   */
+  zone(x: number, y: number): { size: number; speed: number; label?: string };
+  /** その場所の区画の範囲（ピクセル）。動く的が区画をまたがないようにするのに使う。区画がなければ画面全体 */
+  zoneRect(x: number, y: number): { x0: number; y0: number; x1: number; y1: number };
   /** 当たりが物の近くか（子ども向けに少し甘めに判定する。slack は unit の何倍まで広げるか） */
   near(hit: { x: number; y: number }, obj: { x: number; y: number }, radius: number, slack?: number): boolean;
 

@@ -1,7 +1,7 @@
 // 遊びを動かす枠：読み込み・切り替え・後片付け・待機状態・エラー時の戻し。
 
-import { type Application, Container, Text } from "pixi.js";
-import type { GameContext, GameDefinition, GameInstance, Params } from "./game.ts";
+import { type Application, Container, Graphics, Text } from "pixi.js";
+import type { GameContext, GameDefinition, GameInstance, Params, Zone } from "./game.ts";
 import { Fx } from "./fx.ts";
 import type { Hit, WallInput } from "./input.ts";
 import { Motion, ease } from "./motion.ts";
@@ -52,6 +52,8 @@ export class Runtime {
   current: Running | null = null;
 
   readonly gameLayer = new Container();
+  /** 区画の境目と名前（遊びの上、演出の下） */
+  readonly zoneLayer = new Container();
   readonly fxLayer = new Container();
   readonly uiLayer = new Container();
   private readonly motion = new Motion();
@@ -68,7 +70,7 @@ export class Runtime {
     private readonly input: WallInput,
     private readonly opts: RuntimeOptions = { attractAfterMs: 30000, resetAfterMs: 180000 },
   ) {
-    app.stage.addChild(this.gameLayer, this.fxLayer, this.uiLayer);
+    app.stage.addChild(this.gameLayer, this.zoneLayer, this.fxLayer, this.uiLayer);
     this.fx = new Fx(this.fxLayer, this.motion, () => this.unit);
     app.ticker.add((t) => this.tick(t.deltaMS));
     input.onDown(() => this.hideAttract());
@@ -147,7 +149,10 @@ export class Runtime {
     }
     this.motion.clear();
     this.fx.clear();
+    // 演出（飛び出す文字・波紋など）も片付ける。動きを止めたあとに残ると、次の遊びの画面に居座る
+    for (const c of this.fxLayer.removeChildren()) if (!c.destroyed) c.destroy({ children: true });
     for (const c of this.gameLayer.removeChildren()) c.destroy({ children: true });
+    for (const c of this.zoneLayer.removeChildren()) c.destroy({ children: true });
     this.setScore(null);
     this.finishing = false;
   }
@@ -172,6 +177,12 @@ export class Runtime {
         }
       };
     const u = this.unit;
+    const zones = parseZones(params.zones);
+    delete params.zones;
+    const W = this.width;
+    const H = this.height;
+    const findZone = (x: number, y: number) => zones.find((z) => x / W >= z.x0 && x / W <= z.x1 && y / H >= z.y0 && y / H <= z.y1);
+    this.drawZones(zones);
     return {
       app: this.app,
       stage: this.gameLayer,
@@ -188,6 +199,14 @@ export class Runtime {
       onHit: (f) => scope.unsubs.push(this.input.onDown(guard("onHit", f))),
       onRelease: (f) => scope.unsubs.push(this.input.onUp(guard("onRelease", f))),
       touching: () => this.input.points.map((p) => ({ x: p.px, y: p.py, id: p.id })),
+      zone: (x, y) => {
+        const z = findZone(x, y);
+        return { size: z?.size ?? 1, speed: z?.speed ?? 1, label: z?.label };
+      },
+      zoneRect: (x, y) => {
+        const z = findZone(x, y);
+        return z ? { x0: z.x0 * W, y0: z.y0 * H, x1: z.x1 * W, y1: z.y1 * H } : { x0: 0, y0: 0, x1: W, y1: H };
+      },
       near: (hit, obj, radius, slack = 3) => Math.hypot(hit.x - obj.x, hit.y - obj.y) <= radius + slack * u,
       every: (ms, f) => {
         const t = setInterval(guard("every", f), ms);
@@ -216,6 +235,41 @@ export class Runtime {
         scope.timers.add(t);
       },
     };
+  }
+
+  /** 区画の境目（点線）と名前を薄く出す。子どもにも、どちら側が自分の側か分かるように */
+  private drawZones(zones: Zone[]): void {
+    if (!zones.length) return;
+    const W = this.width;
+    const H = this.height;
+    const u = this.unit;
+    const g = new Graphics();
+    const dashed = (x0: number, y0: number, x1: number, y1: number) => {
+      const len = Math.hypot(x1 - x0, y1 - y0);
+      const n = Math.floor(len / (u * 3));
+      for (let i = 0; i < n; i += 2) {
+        const a = i / n;
+        const b = Math.min(1, (i + 1) / n);
+        g.moveTo(x0 + (x1 - x0) * a, y0 + (y1 - y0) * a).lineTo(x0 + (x1 - x0) * b, y0 + (y1 - y0) * b);
+      }
+    };
+    for (const z of zones) {
+      // 画面の端と重なる辺は描かない
+      if (z.x0 > 0.001) dashed(z.x0 * W, z.y0 * H, z.x0 * W, z.y1 * H);
+      if (z.x1 < 0.999) dashed(z.x1 * W, z.y0 * H, z.x1 * W, z.y1 * H);
+      if (z.y0 > 0.001) dashed(z.x0 * W, z.y0 * H, z.x1 * W, z.y0 * H);
+      if (z.y1 < 0.999) dashed(z.x0 * W, z.y1 * H, z.x1 * W, z.y1 * H);
+    }
+    g.stroke({ width: u * 0.6, color: palette.white, alpha: 0.8, cap: "round" });
+    this.zoneLayer.addChild(g);
+    for (const z of zones) {
+      if (!z.label) continue;
+      const t = this.text(z.label, 3.6, palette.white);
+      t.alpha = 0.85;
+      t.x = ((z.x0 + z.x1) / 2) * W;
+      t.y = z.y1 * H - u * 4;
+      this.zoneLayer.addChild(t);
+    }
   }
 
   private tick(dtMs: number): void {
@@ -320,4 +374,22 @@ export class Runtime {
     this.uiLayer.addChild(t);
     this.statusText = t;
   }
+}
+
+/** 区画の設定を確かめて取り出す（壊れた値は無視する） */
+function parseZones(v: unknown): Zone[] {
+  if (!Array.isArray(v)) return [];
+  const num = (x: unknown, lo: number, hi: number, d: number) => (typeof x === "number" && Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : d);
+  return v
+    .filter((z): z is Record<string, unknown> => typeof z === "object" && z !== null)
+    .map((z) => ({
+      x0: num(z.x0, 0, 1, 0),
+      y0: num(z.y0, 0, 1, 0),
+      x1: num(z.x1, 0, 1, 1),
+      y1: num(z.y1, 0, 1, 1),
+      size: num(z.size, 0.3, 3, 1),
+      speed: num(z.speed, 0, 3, 1),
+      label: typeof z.label === "string" ? z.label.slice(0, 20) : undefined,
+    }))
+    .filter((z) => z.x1 > z.x0 && z.y1 > z.y0);
 }

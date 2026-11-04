@@ -20,6 +20,8 @@ export default defineGame({
     const { unit, width, height, params } = ctx;
     const r = unit * 7 * params.size;
     const balloons = new Set<Container>();
+    // 風船ごとの大きさ（区画によって変わる）
+    const radius = new Map<Container, number>();
     let popped = 0;
     const bg = sky(width, height, ctx.line);
     ctx.stage.addChild(bg);
@@ -29,16 +31,21 @@ export default defineGame({
     const spawn = () => {
       if (balloons.size >= params.count) return;
       const color = ctx.pick(ctx.brights);
-      const b = balloon(r, color, ctx.line);
-      b.x = r * 1.5 + ctx.random() * (width - r * 3);
-      b.y = height + r * 1.5;
+      const x = r * 1.5 + ctx.random() * (width - r * 3);
+      // 区画（「小さい子の側は大きくゆっくり」など）に合わせる
+      const z = ctx.zone(x, height * 0.5);
+      const rr = r * z.size;
+      const b = balloon(rr, color, ctx.line);
+      b.x = x;
+      b.y = height + rr * 1.5;
+      radius.set(b, rr);
       ctx.stage.addChild(b);
       balloons.add(b);
       ctx.motion.wobble(b, 0.12, 1800 + ctx.random() * 800);
-      ctx.motion.drift(b, 0, -unit * (8 + ctx.random() * 6) * params.speed, {
+      ctx.motion.drift(b, 0, -unit * (8 + ctx.random() * 6) * params.speed * z.speed, {
         width,
         height,
-        margin: r * 4,
+        margin: rr * 4,
         onExit: () => {
           balloons.delete(b);
           b.destroy({ children: true });
@@ -64,7 +71,7 @@ export default defineGame({
       let bestD = Infinity;
       for (const b of balloons) {
         const d = Math.hypot(hit.x - b.x, hit.y - b.y);
-        if (d < bestD && ctx.near(hit, b, r * 1.2)) {
+        if (d < bestD && ctx.near(hit, b, (radius.get(b) ?? r) * 1.2)) {
           best = b;
           bestD = d;
         }

@@ -69,7 +69,8 @@ export default defineGame({
 
     ctx.onHit((hit) => {
       if (done) return;
-      const brush = unit * 12 * params.brush;
+      // 区画（「小さい子の側は広く晴れる」など）に合わせる
+      const brush = unit * 12 * params.brush * ctx.zone(hit.x, hit.y).size;
       let cleared = 0;
       eraser.clear();
       for (const c of cells) {
