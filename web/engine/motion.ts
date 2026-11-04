@@ -63,6 +63,7 @@ function set(obj: Container, k: string, v: number): void {
 export class Motion {
   private tweens: Tween[] = [];
   private behaviors = new Set<Behavior>();
+  private baseScale = new WeakMap<Container, { x: number; y: number }>();
   private time = 0;
 
   /** 枠が毎フレーム呼ぶ */
@@ -119,12 +120,18 @@ export class Motion {
     return this.to(obj, { scale: 0, alpha: 0 }, ms, ease.inQuad);
   }
 
-  /** 押しつぶれて戻る（当たったときの手ごたえ） */
+  /**
+   * 押しつぶれて戻る（当たったときの手ごたえ）。
+   * 続けて呼ばれても形が崩れないよう、元の大きさを覚えておき、そこへ戻す。
+   */
   async squash(obj: Container, amount = 0.3, ms = 350): Promise<void> {
-    const sx = obj.scale.x;
-    const sy = obj.scale.y;
+    const base = this.baseScale.get(obj) ?? { x: obj.scale.x, y: obj.scale.y };
+    this.baseScale.set(obj, base);
+    const sx = base.x;
+    const sy = base.y;
     await this.to(obj, { scaleX: sx * (1 + amount), scaleY: sy * (1 - amount) }, ms * 0.25, ease.outQuad);
     await this.to(obj, { scaleX: sx, scaleY: sy }, ms * 0.75, ease.outElastic);
+    this.baseScale.delete(obj);
   }
 
   /** その場で跳ねる */
