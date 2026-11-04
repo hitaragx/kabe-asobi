@@ -45,7 +45,12 @@ try {
   await wait(1500);
 
   const client = new Client({ name: "smoke", version: "0" });
-  await client.connect(new StdioClientTransport({ command: "npx", args: ["tsx", "src/mcp/wall-server.ts"] }));
+  await client.connect(new StdioClientTransport({
+      command: "npx",
+      args: ["tsx", "src/mcp/wall-server.ts"],
+      // 確認用に壁に出した記録は、本物の記録（config/games-meta.json）に混ぜない
+      env: { ...(process.env as Record<string, string>), KABE_GAMES_META: "test-results/games-meta-smoke.json" },
+    }));
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     const r = (await client.callTool({ name, arguments: args })) as { content: { type: string; text?: string }[]; isError?: boolean };
     const t = r.content.find((c) => c.type === "text")?.text;

@@ -7,7 +7,8 @@ button { font:inherit; color:inherit; cursor:pointer; }
 header { padding:calc(10px + env(safe-area-inset-top)) 16px 8px; display:flex; align-items:center; justify-content:space-between; }
 header h1 { font-size:18px; margin:0; }
 .badge { font-size:11px; background:var(--yellow); border-radius:999px; padding:2px 8px; vertical-align:middle; }
-.status { font-size:12px; color:var(--sub); display:flex; gap:10px; }
+.status { font-size:12px; color:var(--sub); display:flex; gap:10px; align-items:center; }
+.log { border:1px solid #d1d5db; background:#fff; border-radius:999px; padding:4px 12px; font-size:13px; font-weight:bold; color:var(--ink); }
 .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#d1d5db; margin-right:4px; vertical-align:middle; }
 .ok .dot { background:var(--green); }
 .ng .dot { background:var(--red); }
@@ -47,6 +48,29 @@ header h1 { font-size:18px; margin:0; }
 .game { display:flex; justify-content:space-between; align-items:center; width:100%; text-align:left; border:1px solid #e5e7eb; background:#fff; border-radius:14px; padding:12px 14px; margin-bottom:8px; }
 .game.current { border-color:var(--blue); background:#eef7ff; }
 .game small { color:var(--sub); display:block; margin-top:2px; }
+.game .when { color:#9ca3af; font-size:12px; display:block; margin-top:2px; }
+.game .go { flex:none; border:none; background:var(--blue); color:#fff; border-radius:999px; padding:8px 14px; font-size:13px; font-weight:bold; margin-left:8px; }
+.game .now { flex:none; color:var(--blue); font-weight:bold; font-size:13px; margin-left:8px; }
+.game > div { flex:1; min-width:0; }
+.detail h3 { margin:0 0 4px; font-size:18px; }
+.detail .sub { color:var(--sub); font-size:13px; margin-bottom:12px; }
+.detail .actions-row { display:flex; gap:8px; margin:4px 0 16px; }
+.detail .actions-row button { flex:1; border:none; border-radius:999px; padding:12px; font-weight:bold; background:#eef2f7; }
+.detail .actions-row button.primary { background:var(--blue); color:#fff; }
+.ver { border-left:3px solid #e5e7eb; padding:2px 0 2px 12px; margin:0 0 14px; }
+.ver .t { color:#9ca3af; font-size:12px; }
+.ver .q { font-size:15px; margin:4px 0; }
+.ver .why { font-size:14px; line-height:1.6; background:#f5f7fb; border-radius:12px; padding:8px 10px; margin-top:4px; }
+.ver .why b { display:block; font-size:12px; color:var(--sub); margin-bottom:2px; }
+.ver.new { border-color:var(--green); } .ver.update { border-color:var(--blue); } .ver.rollback { border-color:var(--yellow); }
+.req { border:1px solid #e5e7eb; border-radius:14px; padding:12px 14px; margin-bottom:8px; }
+.req .t { color:#9ca3af; font-size:12px; display:flex; justify-content:space-between; }
+.req .q { font-size:15px; font-weight:bold; margin:4px 0 6px; }
+.req .a { font-size:14px; line-height:1.6; color:#374151; white-space:pre-wrap; }
+.req .tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.req .tags button { border:1px solid var(--blue); color:var(--blue); background:#fff; border-radius:999px; padding:4px 10px; font-size:12px; }
+.req.ng .a { color:var(--red); }
+.empty { color:var(--sub); text-align:center; padding:20px 0; font-size:14px; line-height:1.7; }
 .calib { text-align:center; padding:8px 0 4px; line-height:1.7; }
 .calib .big { font-size:18px; font-weight:bold; margin:8px 0; }
 .calib .dots { font-size:22px; letter-spacing:6px; }

@@ -14,8 +14,10 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { HUB_PORT } from "../shared/protocol.ts";
 import { type Assistant, type AssistantEvent, ClaudeAssistant, MockAssistant } from "./assistant.ts";
+import { type GameVersion, linkRequest, readMeta } from "./games.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+process.chdir(ROOT);
 const STATIC = join(ROOT, "web", "phone");
 const HUB = `http://127.0.0.1:${HUB_PORT}`;
 
@@ -50,6 +52,32 @@ mkdirSync(join(ROOT, "logs"), { recursive: true });
 const logFile = join(ROOT, "logs", `phone-${new Date().toISOString().slice(0, 10)}.jsonl`);
 const record = (t: Turn) => appendFileSync(logFile, `${JSON.stringify(t)}\n`);
 
+// ---- 頼みごとの記録（スマホの「きろく」に出す。起動し直しても残る。logs/ はリポジトリに入れない） ----
+type RequestRecord = {
+  at: number;
+  request: string;
+  reply: string;
+  seconds?: number;
+  costUsd?: number;
+  ok: boolean;
+  assistant: "claude" | "mock";
+  /** この頼みごとで作った・直した遊び */
+  games: { id: string; kind: GameVersion["kind"] }[];
+};
+const requestsFile = join(ROOT, "logs", "requests.jsonl");
+const requests: RequestRecord[] = existsSync(requestsFile)
+  ? readFileSync(requestsFile, "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .flatMap((l) => {
+        try {
+          return [JSON.parse(l) as RequestRecord];
+        } catch {
+          return [];
+        }
+      })
+  : [];
+
 let busy: AbortController | null = null;
 
 // ---- 裏側の画面（動画用）：Claude が何をしているかを、見ている画面すべてに配る ----
@@ -60,6 +88,17 @@ const broadcast = (m: unknown) => {
   const line = `data: ${JSON.stringify(m)}\n\n`;
   for (const w of watchers) w.write(line);
 };
+
+// ---- 遊びの一覧に、作った日・頼みごと・理由をつける。新しく作った・直した順に並べる ----
+function withMeta(games: { id: string; title: string; ages: string; rule: string }[]) {
+  const meta = readMeta();
+  return games
+    .map(({ id, title, ages, rule }) => {
+      const m = meta[id];
+      return { id, title, ages, rule, createdAt: m?.createdAt ?? null, updatedAt: m?.updatedAt ?? null, versions: m ? [...m.versions].reverse() : [] };
+    })
+    .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0) || a.title.localeCompare(b.title, "ja"));
+}
 
 // ---- 小道具 ----
 const json = (res: ServerResponse, code: number, body: unknown) => {
@@ -118,11 +157,13 @@ const server = createServer(async (req, res) => {
         wallOpen: Boolean(status.wallOpen),
         calibration: status.calibration ?? "none",
         game: stats.ok ? stats.data.game : null,
-        games: games.ok ? (games.data as { id: string; title: string; ages: string; rule: string }[]).map(({ id, title, ages, rule }) => ({ id, title, ages, rule })).sort((a, b) => a.title.localeCompare(b.title, "ja")) : [],
+        games: games.ok ? withMeta(games.data as { id: string; title: string; ages: string; rule: string }[]) : [],
         error: status.ok ? undefined : status.error,
       });
     }
     if (req.method === "GET" && url.pathname === "/api/history") return json(res, 200, history);
+    if (req.method === "GET" && url.pathname === "/api/requests")
+      return json(res, 200, requests.filter((r) => r.assistant === assistant.kind).slice(-100).reverse());
     if (req.method === "GET" && url.pathname === "/api/backstage/state")
       return json(res, 200, { assistant: assistant.kind, busy: busy !== null, runs: runs.slice(-20) });
     if (req.method === "GET" && url.pathname === "/api/backstage/stream") {
@@ -202,6 +243,20 @@ const server = createServer(async (req, res) => {
       }, ac.signal);
       history.push(reply);
       record(reply);
+      // この頼みごとの間に壁に出た遊びに、頼みごとを結びつける
+      const touched = linkRequest(run.startedAt, run.prompt);
+      const rec: RequestRecord = {
+        at: run.startedAt,
+        request: run.prompt,
+        reply: reply.error ? `うまくいきませんでした（${reply.error}）` : reply.text,
+        seconds: reply.seconds,
+        costUsd: reply.costUsd,
+        ok: !reply.error,
+        assistant: assistant.kind,
+        games: touched,
+      };
+      requests.push(rec);
+      appendFileSync(requestsFile, `${JSON.stringify(rec)}\n`);
       busy = null;
       res.end();
       return;

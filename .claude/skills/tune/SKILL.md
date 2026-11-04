@@ -12,7 +12,7 @@ description: 遊んでいる最中に職員から「もっと大きく」「ゆ�
 1. **params で済むか**：`list_games` で、いま壁に出ている遊びの調整できる値を見る
    - 済むなら `set_params`（1秒で反映）。例：「大きく」→ size を 1.3〜1.5 倍、「ゆっくり」→ speed を 0.6〜0.7 倍
    - 変えすぎない。1回の変更は 1.5 倍まで。もっと、と言われたらまた変える
-2. **済まないとき**：下書き `web/games/<id>.ts` を直し、`verify_game` → `publish_game`
+2. **済まないとき**：下書き `web/games/<id>.ts` を直し、`verify_game` → `publish_game`（`reason` に、何をなぜ直したかを1〜2文）
    - 次からは params で直せるよう、その値を params に出しておく
 3. **区画**：場所ごとに変えたいときは `set_zones`（すべての遊びが対応している）。区画の名前は子どもにも見えるので、やさしい言葉にする（「ちいさい子」「おおきい子」など）。やめるときは zones を空の配列で
 4. **戻す**：「さっきのがいい」→ 値を変えたなら `reset_params` か `set_params` で元の値、コードを変えたなら `rollback_game`、遊びを変えたなら `previous_game`

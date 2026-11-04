@@ -14,7 +14,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { HUB_PORT, type WallAction } from "../shared/protocol.ts";
 import { analyze, listRecordings, loadRecording } from "../input/analyze.ts";
-import { checkId, listGameFiles, publishFile, rollbackFile } from "../server/games.ts";
+import { checkId, listGameFiles, noteVersion, publishFile, rollbackFile } from "../server/games.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 process.chdir(ROOT);
@@ -128,14 +128,24 @@ server.registerTool(
   "publish_game",
   {
     description:
-      "下書きを検証し、合格したら壁に出す（web/live にコピーし、壁の画面をその遊びに切り替える）。前の版は自動で保存され、rollback_game で戻せる。不合格なら壁は変えない。",
-    inputSchema: { id: z.string(), seconds: z.number().min(2).max(30).optional() },
+      "下書きを検証し、合格したら壁に出す（web/live にコピーし、壁の画面をその遊びに切り替える）。前の版は自動で保存され、rollback_game で戻せる。不合格なら壁は変えない。reason は職員がスマホの「きろく」で読む。",
+    inputSchema: {
+      id: z.string(),
+      reason: z
+        .string()
+        .optional()
+        .describe(
+          "必ず書く。なぜ職員の頼みごとから、この遊び（または直し方）にしたか。職員向けのやさしい日本語で2〜3文。頼みごとのどこ（年齢・人数・行事・場所など）を受けて、何をどう決めたか（勝ち負けの有無、的の大きさ・位置、遊び方の型など）",
+        ),
+      seconds: z.number().min(2).max(30).optional(),
+    },
   },
-  async ({ id, seconds }) => {
+  async ({ id, reason, seconds }) => {
     checkId(id);
     const r = await runVerify(id, seconds ?? 6);
     if (!r.ok) return { ...result(text({ published: false, reason: "検証に通りませんでした。壁は変えていません", verify: r })), isError: true };
-    const { previousSaved } = publishFile(id);
+    const { previousSaved, changed, isNew } = publishFile(id);
+    if (changed) noteVersion(id, { kind: isNew ? "new" : "update", reason: reason?.trim() || undefined });
     // 壁の版のファイルが変わると、壁の画面は自動で開き直す。つながったら切り替える
     await new Promise((res) => setTimeout(res, 800));
     const up = await waitWall();
@@ -153,6 +163,7 @@ server.registerTool(
   async ({ id }) => {
     try {
       const r = rollbackFile(id);
+      noteVersion(id, { kind: "rollback", reason: "前の版に戻しました" });
       await new Promise((res) => setTimeout(res, 800));
       const shown = (await waitWall()) ? await wall({ action: "load", id }) : { ok: false, error: "壁の画面が開いていません" };
       return result(text({ rolledBack: true, restored: r.restored, shown: shown.ok }));

@@ -172,6 +172,7 @@ function openSheet(title, body) {
   $("sheet-title").textContent = title;
   $("sheet-body").innerHTML = "";
   $("sheet-body").append(body);
+  $("sheet").scrollTop = 0;
   $("sheet").hidden = false;
   $("sheet-bg").hidden = false;
 }
@@ -185,24 +186,108 @@ function closeSheet() {
 $("sheet-close").addEventListener("click", closeSheet);
 $("sheet-bg").addEventListener("click", closeSheet);
 
-$("btn-games").addEventListener("click", async () => {
-  await refreshState();
+// ---- 遊びの一覧・詳しい画面・きろく ----
+const KIND = { new: "作った", update: "直した", rollback: "前の版に戻した" };
+function when(ms) {
+  const d = new Date(ms);
+  return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+function day(ms) {
+  const d = new Date(ms);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+async function showOnWall(id) {
+  await api("/api/action", { action: "load", id });
+  closeSheet();
+  refreshState();
+  setTimeout(refreshSnapshot, 300);
+}
+function madeText(g) {
+  if (!g.createdAt) return "はじめから入っている遊び";
+  const c = `${day(g.createdAt)} に作った`;
+  return g.updatedAt && day(g.updatedAt) !== day(g.createdAt) ? `${c}（${day(g.updatedAt)} に直した）` : c;
+}
+
+function showGames() {
   const list = el("div");
   for (const g of state.games) {
-    const b = el("button", `game${g.id === state.game ? " current" : ""}`);
+    const row = el("div", `game${g.id === state.game ? " current" : ""}`);
     const left = el("div");
-    left.append(el("b", "", g.title), el("small", "", `${g.ages}・${g.rule}`));
-    b.append(left, el("span", "", g.id === state.game ? "いま" : "›"));
-    b.addEventListener("click", async () => {
-      await api("/api/action", { action: "load", id: g.id });
-      closeSheet();
-      refreshState();
-      setTimeout(refreshSnapshot, 300);
-    });
-    list.append(b);
+    left.append(el("b", "", g.title), el("small", "", `${g.ages}・${g.rule}`), el("span", "when", madeText(g)));
+    left.addEventListener("click", () => showGame(g.id));
+    row.append(left);
+    if (g.id === state.game) row.append(el("span", "now", "いま"));
+    else {
+      const go = el("button", "go", "出す");
+      go.addEventListener("click", () => showOnWall(g.id));
+      row.append(go);
+    }
+    list.append(row);
   }
+  list.append(el("div", "empty", "遊びの名前を押すと、どの頼みごとから作ったか、なぜその遊びにしたかが見られます"));
   openSheet("遊びをえらぶ", list);
+}
+
+function showGame(id, back = showGames) {
+  const g = state.games.find((x) => x.id === id);
+  if (!g) return;
+  const box = el("div", "detail");
+  box.append(el("h3", "", g.title), el("div", "sub", `${g.ages}・${g.rule}　${madeText(g)}`));
+  const row = el("div", "actions-row");
+  const backBtn = el("button", "", "‹ もどる");
+  backBtn.addEventListener("click", back);
+  row.append(backBtn);
+  if (g.id !== state.game) {
+    const go = el("button", "primary", "この遊びを壁に出す");
+    go.addEventListener("click", () => showOnWall(g.id));
+    row.append(go);
+  }
+  box.append(row);
+  if (!g.versions.length) box.append(el("div", "empty", "はじめから入っている遊びなので、頼みごとの記録はありません"));
+  for (const v of g.versions) {
+    const ver = el("div", `ver ${v.kind}`);
+    ver.append(el("div", "t", `${when(v.at)}　${KIND[v.kind] ?? ""}`));
+    ver.append(el("div", "q", v.request ? `「${v.request}」` : "（頼みごとの記録なし）"));
+    if (v.reason && v.kind !== "rollback") {
+      const why = el("div", "why");
+      why.append(el("b", "", "Claude がこうした理由"), document.createTextNode(v.reason));
+      ver.append(why);
+    }
+    box.append(ver);
+  }
+  openSheet("遊びのくわしいこと", box);
+}
+
+async function showLog() {
+  await refreshState();
+  const reqs = await api("/api/requests");
+  const list = el("div");
+  if (!reqs.length) list.append(el("div", "empty", "まだ頼みごとはありません"));
+  for (const r of reqs) {
+    const card = el("div", `req${r.ok ? "" : " ng"}`);
+    const t = el("div", "t");
+    t.append(el("span", "", when(r.at)), el("span", "", [r.seconds ? `${Math.round(r.seconds)}秒` : "", r.costUsd ? `$${r.costUsd.toFixed(2)}` : ""].filter(Boolean).join("・")));
+    card.append(t, el("div", "q", `「${r.request}」`), el("div", "a", r.reply));
+    if (r.games.length) {
+      const tags = el("div", "tags");
+      for (const x of r.games) {
+        const g = state.games.find((y) => y.id === x.id);
+        const b = el("button", "", `${KIND[x.kind] ?? ""}：${g ? g.title : x.id} ›`);
+        b.addEventListener("click", () => showGame(x.id, showLog));
+        tags.append(b);
+      }
+      card.append(tags);
+    }
+    list.append(card);
+  }
+  openSheet("きろく（これまでの頼みごと）", list);
+}
+
+$("btn-games").addEventListener("click", async () => {
+  await refreshState();
+  showGames();
 });
+$("btn-log").addEventListener("click", showLog);
 
 $("btn-calib").addEventListener("click", async () => {
   const box = el("div", "calib");
