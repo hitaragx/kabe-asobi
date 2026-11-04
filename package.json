@@ -5,7 +5,7 @@
   "type": "module",
   "license": "UNLICENSED",
   "scripts": {
-    "dev": "concurrently -k -n hub,web \"tsx src/server/hub.ts --source sim\" \"vite\"",
+    "dev": "concurrently -k -n hub,wall,phone \"tsx src/server/hub.ts --source sim\" \"vite\" \"tsx src/server/phone.ts\"",
     "hub": "tsx src/server/hub.ts",
     "web": "vite",
     "test": "vitest run",
@@ -17,7 +17,8 @@
     "fake-sensor": "tsx tools/fake-scip.ts",
     "smoke:calib": "tsx tools/calib-smoke.ts",
     "phone": "tsx src/server/phone.ts",
-    "smoke:phone": "tsx tools/phone-smoke.ts"
+    "smoke:phone": "tsx tools/phone-smoke.ts",
+    "dev:lidar": "concurrently -k -n hub,wall,phone \"tsx src/server/hub.ts --source lidar\" \"vite\" \"tsx src/server/phone.ts\""
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
