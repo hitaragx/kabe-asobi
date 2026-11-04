@@ -7,7 +7,7 @@ import { CalibrationView } from "./engine/calibration-view.ts";
 import { WallInput } from "./engine/input.ts";
 import { Runtime } from "./engine/runtime.ts";
 import { type MusicStyle, music } from "./engine/music.ts";
-import { recordWav, setMusicVolume, setVolume, unlockAudio, volumes } from "./engine/sound.ts";
+import { recordWav, setMusicVolume, setVolume, sound, unlockAudio, volumes } from "./engine/sound.ts";
 import { palette } from "./engine/style.ts";
 
 const params = new URLSearchParams(location.search);
@@ -188,6 +188,8 @@ window.__kabe = {
   /** 正規化座標で当たりを起こす */
   hit: (x: number, y: number) => input.inject(x, y),
   stats,
+  /** 確認用（?debug のときだけ）：効果音を直接鳴らす */
+  sfx: debug ? sound : undefined,
   /** 確認用（?debug のときだけ）：音を録って base64 の WAV で返す */
   recordAudio: debug
     ? async (ms: number) => {

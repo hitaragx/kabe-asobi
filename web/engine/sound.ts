@@ -148,32 +148,42 @@ function tone(opts: {
   osc.stop(t1 + 0.02);
 }
 
-/** はじける音（短い雑音） */
-function noise(ms: number, gain = 0.3, highpass = 1500): void {
+/**
+ * 雑音で作る音（はじける・風を切る）。子ども向けに耳に痛くならないよう、
+ * 鳴り始めを少しなめらかにし（attackMs）、高すぎる音を削る（lowpass）。
+ */
+function noise(ms: number, gain = 0.3, opts: { highpass?: number; lowpass?: number; attackMs?: number; sweepTo?: number } = {}): void {
   const r = ready();
   if (!r) return;
   const { ac, out } = r;
+  const t0 = ac.currentTime;
   const len = Math.floor((ac.sampleRate * ms) / 1000);
   const buf = ac.createBuffer(1, len, ac.sampleRate);
   const d = buf.getChannelData(0);
   for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 2;
   const src = ac.createBufferSource();
   src.buffer = buf;
-  const f = ac.createBiquadFilter();
-  f.type = "highpass";
-  f.frequency.value = highpass;
+  const hp = ac.createBiquadFilter();
+  hp.type = "highpass";
+  hp.frequency.value = opts.highpass ?? 300;
+  const lp = ac.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.setValueAtTime(opts.lowpass ?? 3500, t0);
+  if (opts.sweepTo) lp.frequency.exponentialRampToValueAtTime(opts.sweepTo, t0 + ms / 1000);
   const g = ac.createGain();
-  g.gain.value = gain;
-  src.connect(f).connect(g).connect(out);
-  src.start();
+  const attack = (opts.attackMs ?? 4) / 1000;
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(gain, t0 + attack);
+  src.connect(hp).connect(lp).connect(g).connect(out);
+  src.start(t0);
 }
 
 /** 遊びから使う効果音 */
 export const sound = {
-  /** 風船がわれる */
+  /** 風船がわれる（「ぽんっ」と丸い音。耳に痛い高い音は入れない） */
   pop(): void {
-    noise(120, 0.5, 1200);
-    tone({ type: "triangle", from: 900, to: 300, ms: 90, gain: 0.25 });
+    noise(90, 0.28, { highpass: 400, lowpass: 2600, attackMs: 3, sweepTo: 800 });
+    tone({ type: "sine", from: 700, to: 220, ms: 120, gain: 0.5 });
   },
   /** 当たり・正解 */
   ding(pitch = 1): void {
@@ -184,9 +194,9 @@ export const sound = {
   boing(): void {
     tone({ type: "sine", from: 200, to: 600, ms: 180, gain: 0.4 });
   },
-  /** しゅっ（動き・出てくる） */
+  /** しゅっ（動き・出てくる）。ふわっと立ち上がり、音の高さが下がっていく */
   whoosh(): void {
-    noise(250, 0.15, 600);
+    noise(260, 0.5, { highpass: 250, lowpass: 2200, attackMs: 40, sweepTo: 500 });
   },
   /** はずれ（やさしい音にする。子どもが悲しくならないように） */
   miss(): void {
