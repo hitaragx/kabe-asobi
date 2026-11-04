@@ -1,0 +1,76 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__wall__wall_status",
+      "mcp__wall__list_games",
+      "mcp__wall__verify_game",
+      "mcp__wall__publish_game",
+      "mcp__wall__rollback_game",
+      "mcp__wall__show_game",
+      "mcp__wall__previous_game",
+      "mcp__wall__set_params",
+      "mcp__wall__reset_params",
+      "mcp__wall__wall_screenshot",
+      "mcp__wall__sensor_objects",
+      "mcp__wall__test_hit",
+      "mcp__wall__calibrate_start",
+      "mcp__wall__calibrate_status",
+      "mcp__wall__calibrate_redo",
+      "mcp__wall__calibrate_cancel",
+      "Bash(npm test)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run verify *)",
+      "Bash(npm run smoke)",
+      "Bash(npm run smoke:calib)",
+      "Bash(npm run sensor:check *)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx vitest run *)",
+      "Bash(npx tsx tools/verify.ts *)",
+      "Bash(npx tsx tools/probe.ts *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)"
+    ],
+    "deny": [
+      "Edit(web/live/**)"
+    ]
+  },
+  "enabledMcpjsonServers": ["wall"],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard.mjs\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/after-edit.mjs\"",
+            "timeout": 90,
+            "statusMessage": "型チェック中…"
+          }
+        ]
+      }
+    ]
+  }
+}

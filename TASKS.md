@@ -27,4 +27,4 @@
 
 - [ ] T16 実データで当たり検出を調整
 - [x] T17 合わせ込みの流れ（壁に印 → タッチ案内 → 計算 → 確認）※模擬センサーで確認済み。実機は金曜
-- [ ] T18 Skills（new-game / calibrate / tune）、フック、検証用サブエージェント
+- [x] T18 Skills（new-game / calibrate / tune）、フック、検証用サブエージェント

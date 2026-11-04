@@ -1,0 +1,46 @@
+#!/usr/bin/env node
+// コミット前の確認：追加された行に、禁止語・APIキー・個人の環境の情報が入っていないか。
+// 禁止語のリストはリポジトリの外に置く：~/.config/kabe-asobi/forbidden-words.txt（1行1語、# はコメント）
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir, userInfo, hostname } from "node:os";
+import { join } from "node:path";
+
+const diff = execFileSync("git", ["diff", "--cached", "-U0", "--no-color"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+const added = [];
+let file = "";
+for (const line of diff.split("\n")) {
+  if (line.startsWith("+++ ")) file = line.slice(6);
+  else if (line.startsWith("+") && !line.startsWith("+++")) added.push({ file, text: line.slice(1) });
+}
+
+const listFile = join(homedir(), ".config", "kabe-asobi", "forbidden-words.txt");
+const words = existsSync(listFile)
+  ? readFileSync(listFile, "utf8").split("\n").map((s) => s.trim()).filter((s) => s && !s.startsWith("#"))
+  : [];
+
+const rules = [
+  [/sk-ant-[A-Za-z0-9_-]{10,}/, "Anthropic の APIキー"],
+  [/\bAKIA[0-9A-Z]{16}\b/, "AWS のアクセスキー"],
+  [/\bgh[pousr]_[A-Za-z0-9]{30,}\b/, "GitHub のトークン"],
+  [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, "秘密鍵"],
+  [/\/Users\/[A-Za-z0-9._-]+\//, "Mac の絶対パス（ユーザー名が入る）"],
+];
+const me = userInfo().username;
+const host = hostname().replace(/\.local$/, "");
+
+const found = [];
+for (const { file: f, text } of added) {
+  for (const [re, name] of rules) if (re.test(text)) found.push(`${f}: ${name}`);
+  if (me.length >= 3 && text.includes(me)) found.push(`${f}: ユーザー名`);
+  if (host.length >= 3 && text.includes(host)) found.push(`${f}: コンピュータ名`);
+  for (const w of words) if (text.toLowerCase().includes(w.toLowerCase())) found.push(`${f}: 禁止語（リストの語）`);
+}
+
+if (found.length) {
+  // 禁止語そのものは表示しない（ログに残さないため）
+  console.error("コミットを止めました。次の内容が入っています：");
+  for (const f of [...new Set(found)]) console.error(`  - ${f}`);
+  process.exit(1);
+}
+if (!existsSync(listFile)) console.error(`注意：禁止語のリストがありません（${listFile}）。会社名・製品名・顧客名などを1行ずつ書いてください。`);

@@ -38,6 +38,14 @@
 4. 「もっと大きく」「ゆっくり」などは、まず `set_params`。params にない変更は下書きを直して再び `publish_game`
 5. 「さっきのに戻して」は `rollback_game`（同じ遊びの前の版）か `previous_game`（前の遊び）
 
+## Claude Code の仕組み（.claude/）
+
+- Skills：`new-game`（遊びを作る）、`calibrate`（壁への合わせ込み）、`tune`（遊んでいる最中に直す）
+- サブエージェント：`game-checker`（子どもの目線で遊びを確かめる。軽量モデル）
+- フック：web/live/ の直接編集と危ない操作（force push、強制削除など）を止める／遊びを編集したら型チェック
+- git のコミット前フック（.githooks/pre-commit）：APIキー・絶対パス・ユーザー名・禁止語を検出。禁止語リストは `~/.config/kabe-asobi/forbidden-words.txt`（リポジトリに入れない）
+  - クローンしたら `git config core.hooksPath .githooks` を一度実行する
+
 ## 作業のルール
 
 - タスクは `TASKS.md` の上から進め、終わったら印をつける
