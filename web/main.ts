@@ -3,6 +3,7 @@
 
 import { Application, Graphics, Text } from "pixi.js";
 import type { GameDefinition } from "./engine/game.ts";
+import { CalibrationView } from "./engine/calibration-view.ts";
 import { WallInput } from "./engine/input.ts";
 import { Runtime } from "./engine/runtime.ts";
 import { unlockAudio } from "./engine/sound.ts";
@@ -121,6 +122,8 @@ const games = () =>
     params: Object.fromEntries(Object.entries(g.params).map(([k, p]) => [k, { label: p.label, value: p.value, min: p.min, max: p.max }])),
   }));
 
+const calibView = new CalibrationView(app, [runtime.gameLayer, runtime.fxLayer, runtime.uiLayer]);
+
 input.controlHandler = async (a) => {
   switch (a.action) {
     case "load":
@@ -142,6 +145,9 @@ input.controlHandler = async (a) => {
     case "snapshot":
       // 壁に映っている画面そのものを、軽いJPEGで返す
       return await app.renderer.extract.base64({ target: app.stage, resolution: 0.5, format: "jpg", quality: 0.8 });
+    case "calibration":
+      calibView.set(a.view);
+      return true;
     case "reload":
       setTimeout(() => location.reload(), 50);
       return true;

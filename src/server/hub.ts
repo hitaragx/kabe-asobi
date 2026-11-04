@@ -12,9 +12,11 @@ import { type IncomingMessage, createServer } from "node:http";
 import { parseArgs } from "node:util";
 import { WebSocket, WebSocketServer } from "ws";
 import type { Homography } from "../input/calibration.ts";
+import { Calibrator, type CalibState, type CalibTarget } from "../input/calibrator.ts";
 import { Pipeline } from "../input/pipeline.ts";
-import { type ClientMessage, HUB_PORT, type HubMessage, type WallAction } from "../shared/protocol.ts";
+import { type CalibView, type ClientMessage, HUB_PORT, type HubMessage, type WallAction } from "../shared/protocol.ts";
 import { Recorder } from "./recorder.ts";
+import { handTouch } from "../input/sim/simulator.ts";
 import { LidarSource, ReplaySource, type ScanSource, SimSource } from "./sources.ts";
 
 const CALIBRATION_FILE = "config/calibration.json";
@@ -27,6 +29,7 @@ const { values: args } = parseArgs({
     file: { type: "string" },
     record: { type: "string" },
     touches: { type: "boolean", default: false },
+    "no-balls": { type: "boolean", default: false },
     host: { type: "string", default: "192.168.0.10" },
     "scip-port": { type: "string" },
     players: { type: "string" },
@@ -49,7 +52,7 @@ function loadCalibration(): Homography | null {
 async function makeSource(): Promise<ScanSource> {
   switch (args.source) {
     case "sim":
-      return new SimSource({ touches: args.touches, players: args.players ? Number(args.players) : undefined });
+      return new SimSource({ touches: args.touches, balls: !args["no-balls"], players: args.players ? Number(args.players) : undefined });
     case "replay": {
       if (!args.file) throw new Error("--file を指定してください");
       const r = new ReplaySource(args.file, !args["no-loop"]);
@@ -118,6 +121,39 @@ async function main(): Promise<void> {
     writeFileSync(PARAMS_FILE, `${JSON.stringify(savedParams, null, 2)}\n`);
   };
 
+  // ---- 合わせ込み ----
+  const calibrator = new Calibrator();
+  const calibView = (st: CalibState): CalibView | null =>
+    st.phase === "idle"
+      ? null
+      : { phase: st.phase, targets: st.targets, active: st.active, captured: st.captured.map(Boolean), holdProgress: st.holdProgress, message: st.message };
+  calibrator.onChange = (st) => {
+    const ws = wallClient();
+    if (ws) ws.send(JSON.stringify({ kind: "control", reqId: 0, action: "calibration", view: calibView(st) } satisfies HubMessage));
+    if (st.phase === "done" && st.homography) {
+      mkdirSync("config", { recursive: true });
+      writeFileSync(
+        CALIBRATION_FILE,
+        `${JSON.stringify({ homography: st.homography, createdAt: new Date().toISOString(), checkErrorsCm: st.checkErrorsCm, fitErrorsCm: st.fitErrorsCm }, null, 2)}\n`,
+      );
+      pipeline.homography = st.homography;
+      log("calibration.done", { checkErrorsCm: st.checkErrorsCm, fitErrorsCm: st.fitErrorsCm });
+    }
+    if (st.phase === "failed") log("calibration.failed", { message: st.message, checkErrorsCm: st.checkErrorsCm });
+  };
+  const calibSummary = () => {
+    const st = calibrator.state;
+    return {
+      phase: st.phase,
+      active: st.active,
+      message: st.message,
+      targets: st.targets.map((t, i) => ({ ...t, captured: st.captured[i] ?? null })),
+      checkErrorsCm: st.checkErrorsCm.map((e) => +e.toFixed(1)),
+      fitErrorsCm: st.fitErrorsCm.map((e) => +e.toFixed(1)),
+      passCm: calibrator.opts.passCm,
+    };
+  };
+
   const readBody = (req: IncomingMessage) =>
     new Promise<string>((resolve) => {
       let b = "";
@@ -162,6 +198,31 @@ async function main(): Promise<void> {
         log("wall.action", { action: a.action, ok: r.ok, error: r.error });
         return json(200, r);
       }
+      if (req.url === "/api/calibration" && req.method === "GET") return json(200, calibSummary());
+      if (req.url === "/api/calibration/start" && req.method === "POST") {
+        const b = (await readBody(req)) || "{}";
+        const { targets } = JSON.parse(b) as { targets?: CalibTarget[] };
+        calibrator.start(targets);
+        log("calibration.start", {});
+        return json(200, calibSummary());
+      }
+      if (req.url === "/api/calibration/redo" && req.method === "POST") {
+        const { index } = JSON.parse(await readBody(req)) as { index: number };
+        calibrator.redo(index);
+        return json(200, calibSummary());
+      }
+      if (req.url === "/api/calibration/cancel" && req.method === "POST") {
+        calibrator.cancel();
+        return json(200, calibSummary());
+      }
+      if (req.url === "/api/sim/touch" && req.method === "POST") {
+        // 模擬センサーのときだけ：壁の位置（画面の正規化座標）を手でタッチしたことにする
+        if (!(source instanceof SimSource)) return json(400, { ok: false, error: "模擬センサーのときだけ使えます" });
+        const { x, y, ms } = JSON.parse(await readBody(req)) as { x: number; y: number; ms?: number };
+        const sim = source.sim;
+        sim.add(handTouch(x * sim.wallWidth, y * sim.wallHeight, Date.now() - source.startedAt, ms ?? 1200));
+        return json(200, { ok: true });
+      }
       if (req.method === "POST" && req.url === "/api/params/reset") {
         const { id } = JSON.parse(await readBody(req)) as { id: string };
         delete savedParams[id];
@@ -196,9 +257,13 @@ async function main(): Promise<void> {
         roles.set(ws, m.role);
         log("client.connect", { role: m.role, clients: wss.clients.size });
         // 壁の画面には、保存してある調整値を送る
-        if (m.role === "wall")
+        if (m.role === "wall") {
           for (const [id, values] of Object.entries(savedParams))
             ws.send(JSON.stringify({ kind: "control", reqId: 0, action: "setParams", id, values } satisfies HubMessage));
+          // 合わせ込みの途中で画面を開き直しても、続きが出るように
+          if (calibrator.active)
+            ws.send(JSON.stringify({ kind: "control", reqId: 0, action: "calibration", view: calibView(calibrator.state) } satisfies HubMessage));
+        }
       } else if (m.kind === "reply") {
         pending.get(m.reqId)?.(m);
         pending.delete(m.reqId);
@@ -215,6 +280,7 @@ async function main(): Promise<void> {
     recorder?.write(scan);
     const frame = pipeline.process(scan);
     if (pipeline.detector.isLearning) return;
+    if (calibrator.active && pipeline.last) calibrator.update(pipeline.last.tracks, scan.t);
     setSensor("ok");
     if (!frame) return;
     frames++;

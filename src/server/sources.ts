@@ -38,7 +38,7 @@ export class SimSource implements ScanSource {
   private timer: NodeJS.Timeout | null = null;
 
   constructor(
-    private readonly opts: { players?: number; intervalMs?: number; touches?: boolean; seed?: number } = {},
+    private readonly opts: { players?: number; intervalMs?: number; touches?: boolean; seed?: number; balls?: boolean } = {},
   ) {
     this.sim = new Simulator({ seed: opts.seed ?? Date.now() % 100000 });
   }
@@ -47,8 +47,12 @@ export class SimSource implements ScanSource {
     return this.sim.trueHomography();
   }
 
+  /** シミュレーションの時刻0（Unixミリ秒） */
+  startedAt = Date.now();
+
   async start(onScan: (scan: Scan) => void): Promise<void> {
     const t0 = Date.now();
+    this.startedAt = t0;
     const rng = makeRng((this.opts.seed ?? 1) + 99);
     let seq = 0;
     let plannedUntil = 0;
@@ -57,7 +61,7 @@ export class SimSource implements ScanSource {
       const t = Date.now() - t0;
       // 先の分の場面を少しずつ足していく
       while (plannedUntil < t + CHUNK) {
-        addRandomBalls(this.sim, {
+        if (this.opts.balls !== false) addRandomBalls(this.sim, {
           startMs: plannedUntil + 1500,
           durationMs: CHUNK,
           players: this.opts.players ?? 3,

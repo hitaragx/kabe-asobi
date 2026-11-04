@@ -51,9 +51,9 @@ export class Runtime {
   readonly history: string[] = [];
   current: Running | null = null;
 
-  private readonly gameLayer = new Container();
-  private readonly fxLayer = new Container();
-  private readonly uiLayer = new Container();
+  readonly gameLayer = new Container();
+  readonly fxLayer = new Container();
+  readonly uiLayer = new Container();
   private readonly motion = new Motion();
   private readonly uiMotion = new Motion();
   private readonly fx: Fx;

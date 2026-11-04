@@ -238,4 +238,48 @@ server.registerTool(
   },
 );
 
+// ---- 合わせ込み ----
+
+async function hubPost(path: string, body: unknown = {}): Promise<any> {
+  try {
+    const r = await fetch(HUB + path, { method: "POST", body: JSON.stringify(body) });
+    return await r.json();
+  } catch {
+    throw new Error("ハブが動いていません。`npm run dev` で起動してください");
+  }
+}
+
+server.registerTool(
+  "calibrate_start",
+  {
+    description:
+      "壁への合わせ込みを始める。壁に番号つきの丸が順に光るので、職員に「光った丸を手でタッチして、少し押さえてください」と案内する。4隅のあと、確認用の丸（?）が2つ出る。進み具合は calibrate_status で見る。",
+  },
+  async () => result(text(await hubPost("/api/calibration/start"))),
+);
+
+server.registerTool(
+  "calibrate_status",
+  {
+    description:
+      "合わせ込みの進み具合。phase：collect（4隅を記録中）→ check（確認中）→ done（合格・保存済み）/ failed（不合格）。checkErrorsCm が確認用の丸でのずれ（cm、合格は passCm 以下）。failed なら、ずれの大きい丸だけ calibrate_redo でやり直すか、calibrate_start で最初から。",
+  },
+  async () => result(text(await hubGet("/api/calibration"))),
+);
+
+server.registerTool(
+  "calibrate_redo",
+  {
+    description: "合わせ込みの丸を1つだけやり直す（index は0から。4隅は0〜3）。",
+    inputSchema: { index: z.number().int().min(0) },
+  },
+  async ({ index }) => result(text(await hubPost("/api/calibration/redo", { index }))),
+);
+
+server.registerTool(
+  "calibrate_cancel",
+  { description: "合わせ込みをやめて、遊びの画面に戻す（前の合わせ込みの結果のまま）。" },
+  async () => result(text(await hubPost("/api/calibration/cancel"))),
+);
+
 await server.connect(new StdioServerTransport());

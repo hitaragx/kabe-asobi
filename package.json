@@ -14,7 +14,8 @@
     "smoke": "tsx tools/mcp-smoke.ts",
     "sensor:check": "tsx tools/sensor-check.ts",
     "record": "tsx tools/record.ts",
-    "fake-sensor": "tsx tools/fake-scip.ts"
+    "fake-sensor": "tsx tools/fake-scip.ts",
+    "smoke:calib": "tsx tools/calib-smoke.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

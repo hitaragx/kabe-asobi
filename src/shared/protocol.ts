@@ -46,7 +46,18 @@ export type WallAction =
   | { action: "games" }
   | { action: "snapshot" }
   | { action: "hit"; x: number; y: number }
-  | { action: "reload" };
+  | { action: "reload" }
+  | { action: "calibration"; view: CalibView | null };
+
+/** 壁の画面に出す、合わせ込みの様子 */
+export interface CalibView {
+  phase: "idle" | "collect" | "check" | "done" | "failed";
+  targets: { x: number; y: number; check?: boolean }[];
+  active: number;
+  captured: boolean[];
+  holdProgress: number;
+  message: string;
+}
 
 /** ハブ → ブラウザ */
 export type HubMessage =
