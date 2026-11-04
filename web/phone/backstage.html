@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>かべあそび — 裏側</title>
+<style>
+  [hidden] { display:none !important; }
+  :root { --bg:#0f1226; --panel:#181c38; --ink:#eef1ff; --sub:#8f97c2; --line:#2a3060;
+    --skill:#b388ff; --mcp:#3fa7ff; --sub-agent:#ff9f1c; --edit:#3ddc97; --read:#8f97c2; --hook:#ffd23f; --ok:#3ddc97; --ng:#ff5a5f; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink); font-family:"Hiragino Sans","Hiragino Maru Gothic ProN",sans-serif; }
+  body { display:grid; grid-template-columns: 40% 60%; grid-template-rows: auto 1fr auto; gap:16px; padding:20px 24px; height:100vh; overflow:hidden; }
+  header { grid-column: 1 / 3; display:flex; justify-content:space-between; align-items:baseline; }
+  header h1 { margin:0; font-size:26px; letter-spacing:.02em; }
+  header h1 small { color:var(--sub); font-size:16px; margin-left:12px; font-weight:normal; }
+  .badge { font-size:14px; border:1px solid var(--line); border-radius:999px; padding:4px 12px; color:var(--sub); }
+  .panel { background:var(--panel); border-radius:16px; padding:18px 20px; min-height:0; }
+  .left { display:flex; flex-direction:column; gap:14px; min-height:0; }
+  .label { color:var(--sub); font-size:14px; margin-bottom:6px; }
+  .prompt { font-size:24px; line-height:1.5; font-weight:bold; }
+  .prompt.empty { color:var(--sub); font-weight:normal; font-size:18px; }
+  .nums { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+  .num { font-size:56px; font-weight:bold; font-variant-numeric: tabular-nums; line-height:1.1; }
+  .num.small { font-size:40px; }
+  .state { font-size:18px; font-weight:bold; }
+  .state.busy { color:var(--hook); }
+  .state.done { color:var(--ok); }
+  .state.err { color:var(--ng); }
+  .reply { font-size:17px; line-height:1.6; color:#d7dcff; white-space:pre-wrap; max-height:7.5em; overflow:hidden; }
+  .wall { border-radius:12px; overflow:hidden; aspect-ratio:16/10; background:#000; flex:1; min-height:0; }
+  .wall img { width:100%; height:100%; object-fit:contain; display:block; }
+  .timeline { overflow:hidden; display:flex; flex-direction:column; }
+  .rows { overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:6px; scroll-behavior:smooth; }
+  .row { display:grid; grid-template-columns: 64px 34px 1fr; align-items:start; gap:8px; font-size:18px; padding:6px 8px; border-radius:10px; animation: in .25s ease-out; }
+  .row.sub { margin-left:42px; font-size:16px; opacity:.9; }
+  .row .t { color:var(--sub); font-variant-numeric: tabular-nums; text-align:right; padding-top:2px; font-size:15px; }
+  .row .ic { width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:bold; color:#0f1226; }
+  .row .d { color:var(--sub); font-size:14px; margin-top:2px; word-break:break-all; }
+  .k-skill .ic { background:var(--skill); } .k-mcp .ic { background:var(--mcp); } .k-subagent .ic { background:var(--sub-agent); }
+  .k-edit .ic { background:var(--edit); } .k-read .ic { background:#3a4170; color:var(--ink); } .k-hook .ic { background:var(--hook); }
+  .k-model .ic { background:#3a4170; color:var(--ink); }
+  .k-result.ok .ic { background:var(--ok); } .k-result.ng .ic { background:var(--ng); }
+  .k-result.ok b { color:var(--ok); } .k-result.ng b { color:var(--ng); }
+  .legend { display:flex; flex-wrap:wrap; gap:14px; font-size:13px; color:var(--sub); margin-top:10px; }
+  .legend span::before { content:""; display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; background:var(--c); }
+  footer { grid-column: 1 / 3; }
+  table { width:100%; border-collapse:collapse; font-size:15px; }
+  th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); }
+  th { color:var(--sub); font-weight:normal; }
+  th.n { text-align:right; }
+  td.n { text-align:right; font-variant-numeric: tabular-nums; white-space:nowrap; }
+  @keyframes in { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform:none; } }
+</style>
+</head>
+<body>
+  <header>
+    <h1>かべあそび<small>画面の裏側で Claude Code がしていること</small></h1>
+    <span class="badge" id="mode">Claude Opus 5.5 ＋ Claude Agent SDK</span>
+  </header>
+
+  <div class="left">
+    <div class="panel">
+      <div class="label">職員の頼みごと（スマホから）</div>
+      <div class="prompt empty" id="prompt">まだありません</div>
+    </div>
+    <div class="nums">
+      <div class="panel"><div class="label">経過時間</div><div class="num" id="timer">0:00</div></div>
+      <div class="panel"><div class="label">費用</div><div class="num small" id="cost">—</div><div class="state" id="state"></div></div>
+    </div>
+    <div class="panel" id="reply-box" hidden><div class="label">Claude の返事（職員のスマホに出る）</div><div class="reply" id="reply"></div></div>
+    <div class="wall"><img id="wall" alt="壁の今の画面" /></div>
+  </div>
+
+  <div class="panel timeline">
+    <div class="label">Claude の動き</div>
+    <div class="rows" id="rows"></div>
+    <div class="legend">
+      <span style="--c:var(--skill)">Skill</span><span style="--c:var(--mcp)">壁サーバー（MCP）</span>
+      <span style="--c:var(--sub-agent)">サブエージェント</span><span style="--c:var(--edit)">遊びを書く</span>
+      <span style="--c:var(--hook)">フック</span><span style="--c:var(--ok)">検証の合否</span>
+    </div>
+  </div>
+
+  <footer class="panel">
+    <table>
+      <thead><tr><th>頼みごと</th><th class="n">時間</th><th class="n">費用</th><th class="n">Skill</th><th class="n">壁サーバー</th><th class="n">サブエージェント</th><th class="n">フック</th></tr></thead>
+      <tbody id="runs"></tbody>
+    </table>
+  </footer>
+
+  <script src="backstage.js"></script>
+</body>
+</html>

@@ -52,6 +52,15 @@ const record = (t: Turn) => appendFileSync(logFile, `${JSON.stringify(t)}\n`);
 
 let busy: AbortController | null = null;
 
+// ---- 裏側の画面（動画用）：Claude が何をしているかを、見ている画面すべてに配る ----
+type Run = { id: number; prompt: string; startedAt: number; seconds?: number; costUsd?: number; turns?: number; ok?: boolean; events: AssistantEvent[] };
+const runs: Run[] = [];
+const watchers = new Set<ServerResponse>();
+const broadcast = (m: unknown) => {
+  const line = `data: ${JSON.stringify(m)}\n\n`;
+  for (const w of watchers) w.write(line);
+};
+
 // ---- 小道具 ----
 const json = (res: ServerResponse, code: number, body: unknown) => {
   res.writeHead(code, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
@@ -114,6 +123,19 @@ const server = createServer(async (req, res) => {
       });
     }
     if (req.method === "GET" && url.pathname === "/api/history") return json(res, 200, history);
+    if (req.method === "GET" && url.pathname === "/api/backstage/state")
+      return json(res, 200, { assistant: assistant.kind, busy: busy !== null, runs: runs.slice(-20) });
+    if (req.method === "GET" && url.pathname === "/api/backstage/stream") {
+      res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store", connection: "keep-alive" });
+      res.write(": hello\n\n");
+      watchers.add(res);
+      const ping = setInterval(() => res.write(": ping\n\n"), 15000);
+      req.on("close", () => {
+        clearInterval(ping);
+        watchers.delete(res);
+      });
+      return;
+    }
 
     // ---- 壁の今の画面（縮小した JPEG） ----
     if (req.method === "GET" && url.pathname === "/api/snapshot") {
@@ -154,7 +176,11 @@ const server = createServer(async (req, res) => {
       const ac = new AbortController();
       busy = ac;
       res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store", connection: "keep-alive" });
-      const send = (e: AssistantEvent) => res.write(`data: ${JSON.stringify(e)}\n\n`);
+      // 職員の画面には、裏側の記録（trace）は送らない
+      const send = (e: AssistantEvent) => e.type !== "trace" && res.write(`data: ${JSON.stringify(e)}\n\n`);
+      const run: Run = { id: runs.length + 1, prompt: text.trim(), startedAt: Date.now(), events: [] };
+      runs.push(run);
+      broadcast({ kind: "start", run: { id: run.id, prompt: run.prompt, startedAt: run.startedAt } });
       const staff: Turn = { role: "staff", text: text.trim(), at: Date.now() };
       history.push(staff);
       record(staff);
@@ -168,6 +194,10 @@ const server = createServer(async (req, res) => {
           reply.costUsd = e.costUsd;
         }
         if (e.type === "error") reply.error = e.message;
+        if (e.type !== "text") run.events.push(e);
+        if (e.type === "done") Object.assign(run, { seconds: e.seconds, costUsd: e.costUsd, turns: e.turns, ok: true });
+        if (e.type === "error") run.ok = false;
+        broadcast({ kind: "event", runId: run.id, event: e });
         send(e);
       }, ac.signal);
       history.push(reply);
@@ -192,4 +222,5 @@ server.listen(Number(args.port), "0.0.0.0", () => {
   console.log(`スマホの画面（${assistant.kind === "claude" ? "本物の Claude" : "仮の相手"}）`);
   console.log(`  この Mac から：http://127.0.0.1:${args.port}/?k=${KEY}`);
   for (const ip of ips) console.log(`  同じ Wi-Fi のスマホから：http://${ip}:${args.port}/?k=${KEY}`);
+  console.log(`裏側の画面（動画用）：http://127.0.0.1:${args.port}/backstage.html?k=${KEY}`);
 });

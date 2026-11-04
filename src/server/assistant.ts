@@ -13,8 +13,12 @@ export type AssistantEvent =
   | { type: "step"; text: string }
   /** 返事の文字（少しずつ届く） */
   | { type: "text"; delta: string }
-  | { type: "done"; text: string; costUsd?: number; seconds: number }
-  | { type: "error"; message: string };
+  | { type: "done"; text: string; costUsd?: number; seconds: number; turns?: number }
+  | { type: "error"; message: string }
+  /** 裏側の画面用：Claude が何をしたか（職員の画面には出さない） */
+  | { type: "trace"; at: number; kind: TraceKind; label: string; detail?: string; ok?: boolean; sub?: boolean };
+
+export type TraceKind = "model" | "skill" | "mcp" | "subagent" | "edit" | "read" | "hook" | "result";
 
 export interface Assistant {
   readonly kind: "claude" | "mock";
@@ -72,6 +76,12 @@ function stepText(tool: string): string | null {
   return map[tool] ?? null;
 }
 
+function shortName(tool: string): string {
+  if (tool.startsWith("mcp__wall__")) return tool.slice(11);
+  if (tool === "Agent" || tool === "Task") return "サブエージェント";
+  return tool;
+}
+
 export class ClaudeAssistant implements Assistant {
   readonly kind = "claude" as const;
   private sessionId: string | undefined;
@@ -92,6 +102,10 @@ export class ClaudeAssistant implements Assistant {
     signal.addEventListener("abort", () => abortController.abort());
     let text = "";
     let lastStep = "";
+    const tools = new Map<string, string>(); // 道具の呼び出しID → 名前
+    const trace = (e: Omit<Extract<AssistantEvent, { type: "trace" }>, "type" | "at">) =>
+      emit({ type: "trace", at: (Date.now() - t0) / 1000, ...e });
+    const rel = (p: unknown) => String(p ?? "").replace(`${this.cwd}/`, "");
     try {
       const q = query({
         prompt,
@@ -108,6 +122,7 @@ export class ClaudeAssistant implements Assistant {
           model: this.opts.model ?? "claude-opus-5-5",
           maxBudgetUsd: this.opts.maxBudgetUsd ?? 3,
           includePartialMessages: true,
+          includeHookEvents: true,
           abortController,
           ...(this.sessionId ? { resume: this.sessionId } : {}),
           // キーはこのプロセスにだけ渡す（シェルに置くと Remote Control が動かなくなるため）
@@ -116,6 +131,11 @@ export class ClaudeAssistant implements Assistant {
       });
       for await (const m of q) {
         if (m.type === "system" && m.subtype === "init") {
+          trace({
+            kind: "model",
+            label: m.model,
+            detail: `壁サーバー：${m.mcp_servers.map((x) => `${x.name} ${x.status}`).join("、")}`,
+          });
           // 何が読み込まれたかを記録する（壁サーバー・Skills・サブエージェントがそろっているか）
           console.error(
             JSON.stringify({
@@ -137,8 +157,56 @@ export class ClaudeAssistant implements Assistant {
             text += ev.delta.text;
             emit({ type: "text", delta: ev.delta.text });
           }
+        } else if (m.type === "system" && m.subtype === "hook_response") {
+          const out = `${m.stdout ?? ""}${m.stderr ?? ""}`;
+          let detail = out.trim().slice(0, 120);
+          try {
+            const j = JSON.parse(m.stdout);
+            detail = j.hookSpecificOutput?.additionalContext ?? j.reason ?? detail;
+          } catch {
+            // JSON でない出力はそのまま
+          }
+          const hookOk = m.outcome === "success" && (m.exit_code ?? 0) === 0;
+          // 何も言わずに通した実行前の見張りは出さない（止めたときだけ出す）
+          if (!(m.hook_event === "PreToolUse" && hookOk && !detail))
+            trace({ kind: "hook", label: `フック：${m.hook_event}${hookOk ? "" : "（止めました）"}`, detail, ok: hookOk });
+        } else if (m.type === "user" && Array.isArray(m.message.content)) {
+          for (const b of m.message.content) {
+            if (typeof b !== "object" || b.type !== "tool_result") continue;
+            const name = tools.get(b.tool_use_id) ?? "";
+            const body = Array.isArray(b.content) ? b.content.map((c) => (c.type === "text" ? c.text : "")).join("") : String(b.content ?? "");
+            let ok = !b.is_error;
+            let detail = "";
+            if (name === "mcp__wall__verify_game" || name === "mcp__wall__publish_game") {
+              try {
+                const j = JSON.parse(body);
+                ok = j.ok ?? j.published ?? ok;
+                const r = j.results?.[0] ?? j.verify?.results?.[0];
+                detail = r ? `FPS ${r.fps}${r.problems?.length ? `、${r.problems.join("、").slice(0, 80)}` : ""}` : "";
+              } catch {
+                // そのまま
+              }
+            }
+            if (name.startsWith("mcp__wall__") || name === "Agent" || name === "Task" || b.is_error)
+              trace({ kind: "result", label: `${shortName(name)}：${ok ? "合格" : "不合格"}`, detail, ok, sub: Boolean(m.parent_tool_use_id) });
+          }
         } else if (m.type === "assistant") {
           for (const block of m.message.content) {
+            if (block.type === "tool_use") {
+              tools.set(block.id, block.name);
+              const inp = (block.input ?? {}) as Record<string, unknown>;
+              const sub = Boolean(m.parent_tool_use_id);
+              if (block.name === "Skill") trace({ kind: "skill", label: `Skill：${inp.skill ?? inp.name ?? ""}`, sub });
+              else if (block.name === "Agent" || block.name === "Task")
+                trace({ kind: "subagent", label: `サブエージェント：${inp.subagent_type ?? ""}`, detail: String(inp.description ?? ""), sub });
+              else if (block.name.startsWith("mcp__wall__")) {
+                const { id, ...rest } = inp;
+                const args = Object.keys(rest).length ? JSON.stringify(rest).slice(0, 90) : "";
+                trace({ kind: "mcp", label: `壁サーバー：${block.name.slice(11)}`, detail: [id, args].filter(Boolean).join(" "), sub });
+              } else if (block.name === "Edit" || block.name === "Write") trace({ kind: "edit", label: `${block.name}：${rel(inp.file_path)}`, sub });
+              else if (block.name === "Read") trace({ kind: "read", label: `Read：${rel(inp.file_path)}`, sub });
+              else if (block.name === "Glob" || block.name === "Grep") trace({ kind: "read", label: `${block.name}：${String(inp.pattern ?? "")}`, sub });
+            }
             if (block.type === "tool_use") {
               const s = stepText(block.name);
               if (s && s !== lastStep) {
@@ -152,7 +220,7 @@ export class ClaudeAssistant implements Assistant {
         } else if (m.type === "result") {
           this.sessionId = m.session_id;
           const final = m.subtype === "success" ? m.result : text;
-          emit({ type: "done", text: final || text, costUsd: m.total_cost_usd, seconds: (Date.now() - t0) / 1000 });
+          emit({ type: "done", text: final || text, costUsd: m.total_cost_usd, seconds: (Date.now() - t0) / 1000, turns: m.num_turns });
           return;
         }
       }
@@ -203,6 +271,7 @@ export class MockAssistant implements Assistant {
       const scale = async (key: string, k: number, done: string) => {
         if (!game || !def?.params[key]) return say("この遊びでは、その調整はまだできません。（仮の相手です）");
         emit({ type: "step", text: "調整しています" });
+        emit({ type: "trace", at: (Date.now() - t0) / 1000, kind: "mcp", label: "壁サーバー：set_params（仮の相手）", detail: `${game} ${key}×${k}` });
         await wait(600);
         const cur = Number(def.params[key].value);
         await this.wall({ action: "setParams", id: game, values: { [key]: +(cur * k).toFixed(2) } });

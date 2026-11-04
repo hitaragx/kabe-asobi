@@ -50,11 +50,21 @@ try {
   await wall.goto("http://127.0.0.1:5173/?muted");
   await wait(2000);
 
+  // 裏側の画面（動画用）も開いて、途中と最後を撮る
+  const back = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+  await back.goto(`http://127.0.0.1:8790/backstage.html?k=${KEY}`);
+  await wait(1000);
+
   let total = 0;
   for (const [i, text] of prompts.entries()) {
     console.log(`\n[${i + 1}] 職員：${text}`);
     const t0 = Date.now();
     const r = await fetch(`http://127.0.0.1:8790/api/chat?k=${KEY}`, { method: "POST", body: JSON.stringify({ text }) });
+    let shots = 0;
+    const shotTimer = setInterval(() => {
+      shots++;
+      void back.screenshot({ path: `test-results/backstage-${i + 1}-${shots}.png` }).catch(() => {});
+    }, 20000);
     const reader = r.body!.getReader();
     const dec = new TextDecoder();
     let buf = "";
@@ -78,8 +88,10 @@ try {
         }
       }
     }
+    clearInterval(shotTimer);
     await wait(1500);
     await wall.screenshot({ path: `test-results/rehearsal-${i + 1}.png` });
+    await back.screenshot({ path: `test-results/backstage-${i + 1}-end.png` });
     const st = await wall.evaluate(() => (window as any).__kabe.stats());
     console.log(`  壁：${st.game}、エラー ${st.errors.length}件`);
   }
