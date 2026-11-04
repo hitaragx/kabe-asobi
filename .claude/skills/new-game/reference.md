@@ -4,6 +4,7 @@
 import { defineGame } from "../engine/game.ts";
 export default defineGame({
   id, title, description, rule, ages, input: "ボール" | "タッチ" | "どちらでも",
+  music: "nonbiri",  // BGM の雰囲気（下の表）
   params: { size: { value: 1, label: "的の大きさ", min: 0.5, max: 2 } },
   setup(ctx) { /* 絵を置く・ctx.onHit を登録する */ return { update(dtMs) {}, destroy() {} }; },
 });
@@ -41,6 +42,21 @@ export default defineGame({
 ## ctx.sound（効果音）
 
 `pop()`、`ding(pitch)`、`boing()`、`whoosh()`、`miss()`（やさしいはずれ）、`fanfare()`、`note(i)`（ドレミ）。
+
+## music（BGM）
+
+遊びの定義に `music` を書くと、その雰囲気の曲が流れる（枠が鳴らす。遊びのコードは何もしなくてよい）。曲は遊びの ID から作るので、遊びごとに違う曲になる。
+
+| music | 合う遊び |
+|---|---|
+| `nonbiri` | のんびり。小さい子、ゆっくりした的当て（省いたときもこれ） |
+| `nigiyaka` | にぎやか。対戦、時間制、小学生 |
+| `wa` | 和風。節分、お月見、お正月、七夕など和の行事 |
+| `fushigi` | ふしぎ。雲・海・宇宙・夜、ゆっくり消していく遊び |
+| `kirakira` | きらきら。シャボン玉、星、雪、クリスマス |
+| `none` | なし。ドレミなど、音そのものが遊びのとき |
+
+音楽と効果音の大きさは壁全体の設定で、職員がスマホの「おと」か、頼みごと（`set_audio`）で変える。遊びのコードで音量を決めない。
 
 ## 絵（web/engine/draw.ts）
 

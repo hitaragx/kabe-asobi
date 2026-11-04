@@ -23,6 +23,7 @@
 - [x] T24 デモ動画の台本と撮影リスト（docs/demo-script.md）
 - [x] T25 反応の遅れの計測方法（`npm run latency`、docs/latency.md。模擬センサーでソフトの部分は中央10ms）
 - [x] T32 遊びの一覧に作った日・新しい順、頼みごとの「きろく」、Claude がそうした理由（publish_game の reason）
+- [x] T33 BGM（5つの雰囲気、Web Audio で合成）と、音楽・効果音の音量調整（スマホの「おと」、set_audio）
 - [x] T26 スマホ実機（iPhone Safari）での確認項目のリスト（docs/phone-check.md。確認は金曜）
 
 ## 11/6（金）夜・自宅（新しいセッションで、壁サーバーを Claude の道具として使う）

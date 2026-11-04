@@ -10,6 +10,7 @@ export default defineGame({
   rule: "チーム対戦",
   ages: "小学生",
   input: "ボール",
+  music: "nigiyaka",
   params: {
     size: { value: 1, label: "風船の大きさ", min: 0.5, max: 2 },
     speed: { value: 1, label: "のぼる速さ", min: 0.3, max: 2 },

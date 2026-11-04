@@ -75,9 +75,32 @@ try {
   await phone.click("#btn-games");
   await phone.waitForSelector(".game");
   await phone.screenshot({ path: "test-results/phone-4-games.png" });
-  await phone.click("text=どうぶつ おんがくたい");
+  // 名前を押すと、くわしいこと（作った日・頼みごと・理由）が開く
+  await phone.click('.game:has-text("どうぶつ おんがくたい") > div');
+  await phone.waitForSelector(".detail");
+  check("遊びのくわしいことが開く", (await phone.textContent(".detail h3")) === "どうぶつ おんがくたい", await phone.textContent(".detail h3"));
+  await phone.click(".detail .actions-row button:first-child"); // もどる
+  await phone.click('.game:has-text("どうぶつ おんがくたい") .go');
   await wait(1500);
   check("遊びを切り替えられる", (await phone.textContent("#wall-title")) === "どうぶつ おんがくたい", await phone.textContent("#wall-title"));
+
+  // きろく
+  await phone.click("#btn-log");
+  await phone.waitForSelector(".req, .empty");
+  check("きろくが開く", (await phone.locator(".req").count()) >= 1, await phone.locator(".req").count());
+  await phone.click("#sheet-close");
+
+  // おと：音楽を1つ小さくすると、ハブに保存される
+  const before = (await (await fetch("http://127.0.0.1:8787/api/status")).json()).audio.music as number;
+  await phone.click("#btn-sound");
+  await phone.waitForSelector(".vol");
+  await phone.click(".vol .row button:first-child");
+  await wait(800);
+  const after = (await (await fetch("http://127.0.0.1:8787/api/status")).json()).audio.music as number;
+  check("おとで音楽の大きさが変わる", after === Math.max(0, before - 1), { before, after });
+  await phone.click(".vol .row button:last-child");
+  await wait(800);
+  await phone.click("#sheet-close");
 
   // 戻す
   await phone.click("#btn-back");

@@ -9,6 +9,7 @@ export default defineGame({
   rule: "的当て",
   ages: "3歳〜",
   input: "どちらでも",
+  music: "nigiyaka",
   params: {
     size: { value: 1, label: "風船の大きさ", min: 0.5, max: 2 },
     speed: { value: 1, label: "のぼる速さ", min: 0.3, max: 2 },

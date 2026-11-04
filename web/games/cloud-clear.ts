@@ -10,6 +10,7 @@ export default defineGame({
   rule: "みんなで協力",
   ages: "3歳〜",
   input: "どちらでも",
+  music: "fushigi",
   params: {
     brush: { value: 1, label: "1回で はれる広さ", min: 0.5, max: 3 },
     cell: { value: 1, label: "くもの つぶの大きさ", min: 0.6, max: 2 },

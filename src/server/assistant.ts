@@ -36,6 +36,7 @@ const STAFF_MODE = `
 - 壁に出す前に必ず verify_game で確かめ、壁に出すのは publish_game だけ
 - publish_game には必ず reason を付ける（なぜこの頼みごとから、この遊び・直し方にしたか。職員があとで「きろく」で読む）
 - 「大きく」「ゆっくり」など params で済むものは set_params で直す
+- 音楽・効果音の大きさ、曲の雰囲気は set_audio で直す
 - 終わったら、何を変えたかを一言で伝え、「どうですか？」と聞く
 - 分からないことは推測で大きく作り変えず、1問だけ聞く
 `.trim();
@@ -45,6 +46,7 @@ function stepText(tool: string): string | null {
   const map: Record<string, string> = {
     mcp__wall__verify_game: "遊びを確かめています",
     mcp__wall__publish_game: "壁に出しています",
+    mcp__wall__set_audio: "音を調整しています",
     mcp__wall__rollback_game: "前の版に戻しています",
     mcp__wall__previous_game: "前の遊びに戻しています",
     mcp__wall__show_game: "遊びを切り替えています",

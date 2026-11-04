@@ -9,6 +9,7 @@ export default defineGame({
   rule: "終わりのない遊び",
   ages: "2歳〜",
   input: "タッチ",
+  music: "kirakira",
   params: {
     size: { value: 1, label: "シャボン玉の大きさ", min: 0.5, max: 2 },
     speed: { value: 1, label: "シャボン玉の速さ", min: 0, max: 2.5 },

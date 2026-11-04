@@ -283,6 +283,88 @@ async function showLog() {
   openSheet("きろく（これまでの頼みごと）", list);
 }
 
+// ---- おと（音楽・効果音の大きさ、曲の雰囲気） ----
+let lastMusic = 4;
+async function setAudio(body) {
+  const r = await api("/api/action", { action: "audio", ...body });
+  if (!r.ok) alert(r.error || "変えられませんでした");
+  return r;
+}
+function volumeRow(label, key, value, onChange) {
+  const box = el("div", "vol");
+  const head = el("div", "head");
+  const num = el("span", "", String(value));
+  head.append(el("b", "", label), num);
+  const row = el("div", "row");
+  const minus = el("button", "", "−");
+  const plus = el("button", "", "＋");
+  const range = el("input");
+  range.type = "range";
+  range.min = "0";
+  range.max = "10";
+  range.step = "1";
+  range.value = String(value);
+  let timer = null;
+  const apply = (v, now) => {
+    v = Math.max(0, Math.min(10, v));
+    range.value = String(v);
+    num.textContent = v === 0 ? "消音" : String(v);
+    clearTimeout(timer);
+    timer = setTimeout(() => onChange(v), now ? 0 : 250);
+  };
+  num.textContent = value === 0 ? "消音" : String(value);
+  range.addEventListener("input", () => apply(Number(range.value), false));
+  minus.addEventListener("click", () => apply(Number(range.value) - 1, true));
+  plus.addEventListener("click", () => apply(Number(range.value) + 1, true));
+  row.append(minus, range, plus);
+  const ends = el("div", "ends");
+  ends.append(el("span", "", "小さい"), el("span", "", "大きい"));
+  box.append(head, row, ends);
+  box.dataset.key = key;
+  box.set = (v) => apply(v, true);
+  return box;
+}
+
+async function showSound() {
+  await refreshState();
+  const a = state.audio || { music: 4, sfx: 6 };
+  if (a.music > 0) lastMusic = a.music;
+  const box = el("div");
+  const musicRow = volumeRow("音楽（BGM）", "music", a.music, (v) => {
+    if (v > 0) lastMusic = v;
+    mute.textContent = v === 0 ? "音楽を流す" : "音楽を止める";
+    setAudio({ music: v });
+  });
+  const mute = el("button", "mute", a.music === 0 ? "音楽を流す" : "音楽を止める");
+  mute.addEventListener("click", () => musicRow.set(Number(musicRow.querySelector("input").value) === 0 ? lastMusic : 0));
+  musicRow.append(mute);
+  box.append(musicRow);
+  box.append(volumeRow("効果音（当たったときの音）", "sfx", a.sfx, (v) => setAudio({ sfx: v })));
+
+  const g = state.games.find((x) => x.id === state.game);
+  if (g && state.musicStyles) {
+    const st = el("div", "vol");
+    st.append(el("div", "head"));
+    st.firstChild.append(el("b", "", `いまの遊びの曲（${g.title}）`));
+    const chips = el("div", "styles");
+    for (const [key, label] of Object.entries(state.musicStyles)) {
+      const b = el("button", key === g.music ? "on" : "", label);
+      b.addEventListener("click", async () => {
+        for (const c of chips.children) c.classList.remove("on");
+        b.classList.add("on");
+        g.music = key;
+        await setAudio({ id: g.id, style: key });
+      });
+      chips.append(b);
+    }
+    st.append(chips);
+    box.append(st);
+  }
+  box.append(el("div", "note", "音の大きさは、すべての遊びで同じです。Claude に「音楽を小さくして」と頼んでも変えられます。"));
+  openSheet("おと", box);
+}
+$("btn-sound").addEventListener("click", showSound);
+
 $("btn-games").addEventListener("click", async () => {
   await refreshState();
   showGames();

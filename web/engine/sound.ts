@@ -1,9 +1,16 @@
 // 効果音：外部の音素材は使わず、Web Audio で合成する。
 // ブラウザは最初の操作があるまで音を出せないため、unlock() を一度呼ぶ必要がある。
 
+// 音の出口は2つ：効果音（master）と音楽（musicBus）。音量は別々に変えられる。
+
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
+let musicBus: GainNode | null = null;
+let musicDuck: GainNode | null = null;
+let musicOutNode: AudioNode | null = null;
 let volume = 0.6;
+let musicVolume = 0.4;
+const unlockListeners = new Set<() => void>();
 
 export function unlockAudio(): void {
   if (!ctx) {
@@ -11,17 +18,106 @@ export function unlockAudio(): void {
     master = ctx.createGain();
     master.gain.value = volume;
     master.connect(ctx.destination);
+    // 音楽：音量 → 効果音のときに少し下げる → やわらかくする（高い音を少し削る）
+    musicBus = ctx.createGain();
+    musicBus.gain.value = musicVolume * MUSIC_SCALE;
+    musicDuck = ctx.createGain();
+    const soft = ctx.createBiquadFilter();
+    soft.type = "lowpass";
+    soft.frequency.value = 5000;
+    musicBus.connect(musicDuck).connect(soft).connect(ctx.destination);
+    musicOutNode = soft;
   }
-  void ctx.resume();
+  void ctx.resume().then(() => {
+    for (const f of unlockListeners) f();
+  });
 }
 
+/** 音が出せるようになったら呼ぶ（音楽を始めるため） */
+export function onAudioUnlock(f: () => void): void {
+  unlockListeners.add(f);
+}
+
+/** 音楽は効果音より小さく聞こえるように、音量に掛ける係数 */
+const MUSIC_SCALE = 1;
+
+/** 効果音の音量（0〜1） */
 export function setVolume(v: number): void {
   volume = Math.max(0, Math.min(1, v));
   if (master) master.gain.value = volume;
 }
+/** 音楽の音量（0〜1）。0 で止まる */
+export function setMusicVolume(v: number): void {
+  musicVolume = Math.max(0, Math.min(1, v));
+  if (ctx && musicBus) musicBus.gain.setTargetAtTime(musicVolume * MUSIC_SCALE, ctx.currentTime, 0.15);
+}
+export const volumes = () => ({ sfx: volume, music: musicVolume });
+
+/** 音楽の出口（まだ音が出せないときは null） */
+export function musicOut(): { ac: AudioContext; out: GainNode } | null {
+  if (!ctx || !musicBus || ctx.state !== "running") return null;
+  return { ac: ctx, out: musicBus };
+}
+
+/**
+ * 確認用：スピーカーに出ている音（効果音＋音楽）を ms ミリ秒録って、WAV（16bit・モノラル）で返す。
+ * 壁の画面を ?debug で開いたときだけ window.__kabe から使う。
+ */
+export function recordWav(ms: number): Promise<ArrayBuffer> {
+  if (!ctx || !master || !musicOutNode) return Promise.reject(new Error("音がまだ出せません"));
+  const ac = ctx;
+  const proc = ac.createScriptProcessor(4096, 1, 1);
+  const chunks: Float32Array[] = [];
+  proc.onaudioprocess = (e) => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+  const mute = ac.createGain();
+  mute.gain.value = 0;
+  master.connect(proc);
+  musicOutNode.connect(proc);
+  proc.connect(mute).connect(ac.destination);
+  return new Promise((resolve) =>
+    setTimeout(() => {
+      master!.disconnect(proc);
+      musicOutNode!.disconnect(proc);
+      proc.disconnect();
+      const n = chunks.reduce((a, c) => a + c.length, 0);
+      const buf = new ArrayBuffer(44 + n * 2);
+      const v = new DataView(buf);
+      const w = (o: number, str: string) => [...str].forEach((ch, i) => v.setUint8(o + i, ch.charCodeAt(0)));
+      w(0, "RIFF");
+      v.setUint32(4, 36 + n * 2, true);
+      w(8, "WAVEfmt ");
+      v.setUint32(16, 16, true);
+      v.setUint16(20, 1, true);
+      v.setUint16(22, 1, true);
+      v.setUint32(24, ac.sampleRate, true);
+      v.setUint32(28, ac.sampleRate * 2, true);
+      v.setUint16(32, 2, true);
+      v.setUint16(34, 16, true);
+      w(36, "data");
+      v.setUint32(40, n * 2, true);
+      let o = 44;
+      for (const c of chunks)
+        for (const x of c) {
+          v.setInt16(o, Math.max(-1, Math.min(1, x)) * 0x7fff, true);
+          o += 2;
+        }
+      resolve(buf);
+    }, ms),
+  );
+}
+
+/** 効果音が鳴った瞬間だけ、音楽を少し下げる（当たった音が聞こえやすいように） */
+function duck(): void {
+  if (!ctx || !musicDuck) return;
+  const t = ctx.currentTime;
+  musicDuck.gain.cancelScheduledValues(t);
+  musicDuck.gain.setTargetAtTime(0.55, t, 0.02);
+  musicDuck.gain.setTargetAtTime(1, t + 0.25, 0.25);
+}
 
 function ready(): { ac: AudioContext; out: GainNode } | null {
   if (!ctx || !master || ctx.state !== "running") return null;
+  duck();
   return { ac: ctx, out: master };
 }
 

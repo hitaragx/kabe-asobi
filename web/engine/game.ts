@@ -15,6 +15,7 @@ import type { Application, Container } from "pixi.js";
 import type { Fx } from "./fx.ts";
 import type { Hit } from "./input.ts";
 import type { Motion } from "./motion.ts";
+import type { MusicStyle } from "./music.ts";
 import type { Sound } from "./sound.ts";
 import type { palette } from "./style.ts";
 
@@ -115,6 +116,11 @@ export interface GameDefinition<P extends Params = Params> {
   /** 遊び方：ボール／タッチ／どちらでも */
   input: "ボール" | "タッチ" | "どちらでも";
   params: P;
+  /**
+   * BGM の雰囲気。省くと「のんびり」。
+   * nonbiri（のんびり）／nigiyaka（にぎやか・対戦向き）／wa（和風・節分やお月見）／fushigi（ふしぎ）／kirakira（きらきら・シャボン玉や星）／none（なし。音そのものが遊びのとき）
+   */
+  music?: MusicStyle;
   setup(ctx: GameContext<P>): GameInstance | void;
 }
 

@@ -10,6 +10,8 @@ export default defineGame({
   rule: "終わりのない遊び",
   ages: "2歳〜",
   input: "どちらでも",
+  // 音そのものが遊びなので、BGM は流さない
+  music: "none",
   params: {
     animals: { value: 5, label: "動物の数", min: 2, max: 8 },
     size: { value: 1, label: "動物の大きさ", min: 0.5, max: 1.6 },

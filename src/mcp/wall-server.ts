@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { HUB_PORT, type WallAction } from "../shared/protocol.ts";
+import { HUB_PORT, MUSIC_STYLES, type MusicStyle, type WallAction } from "../shared/protocol.ts";
 import { analyze, listRecordings, loadRecording } from "../input/analyze.ts";
 import { checkId, listGameFiles, noteVersion, publishFile, rollbackFile } from "../server/games.ts";
 
@@ -204,6 +204,26 @@ server.registerTool(
   async ({ id, values }) => {
     const r = await wall({ action: "setParams", id, values });
     return r.ok ? result(text({ ok: true, values })) : fail(r.error ?? "変えられませんでした");
+  },
+);
+
+server.registerTool(
+  "set_audio",
+  {
+    description:
+      "音の調整（壁全体）。「音楽を小さく」「音楽を止めて」「音を大きく」「和風の曲にして」など。music は音楽、sfx は効果音の音量で、どちらも 0〜10（0 で消える。既定は音楽4・効果音6）。1回に変えるのは2〜3段まで。styles で遊びごとの曲の雰囲気を変えられる（null で遊びの決めた雰囲気に戻す）。値は保存され、画面を開き直しても残る。",
+    inputSchema: {
+      music: z.number().min(0).max(10).optional().describe("音楽の音量 0〜10"),
+      sfx: z.number().min(0).max(10).optional().describe("効果音の音量 0〜10"),
+      styles: z
+        .record(z.string(), z.enum(Object.keys(MUSIC_STYLES) as [MusicStyle, ...MusicStyle[]]).nullable())
+        .optional()
+        .describe(`遊びの ID → 曲の雰囲気。${Object.entries(MUSIC_STYLES).map(([k, v]) => `${k}=${v}`).join("、")}`),
+    },
+  },
+  async ({ music, sfx, styles }) => {
+    const r = await wall({ action: "audio", music, sfx, styles });
+    return r.ok ? result(text({ ok: true, now: r.data })) : fail(r.error ?? "変えられませんでした");
   },
 );
 

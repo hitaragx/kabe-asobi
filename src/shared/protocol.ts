@@ -39,6 +39,28 @@ export interface WallFrame {
   events: WallEvent[];
 }
 
+/** BGM の雰囲気と、職員に見せる名前 */
+export const MUSIC_STYLES = {
+  nonbiri: "のんびり",
+  nigiyaka: "にぎやか",
+  wa: "和風",
+  fushigi: "ふしぎ",
+  kirakira: "きらきら",
+  none: "なし",
+} as const;
+export type MusicStyle = keyof typeof MUSIC_STYLES;
+
+/** 音の設定（壁全体。保存して、画面を開き直しても引き継ぐ） */
+export interface AudioSettings {
+  /** 音楽の音量 0〜10（0 で止まる） */
+  music: number;
+  /** 効果音の音量 0〜10 */
+  sfx: number;
+  /** 遊びごとの曲の雰囲気の上書き（遊びの ID → 雰囲気）。ない遊びは遊びの決めた雰囲気 */
+  styles: Record<string, MusicStyle>;
+}
+export const DEFAULT_AUDIO: AudioSettings = { music: 4, sfx: 6, styles: {} };
+
 /** 壁の画面への操作（壁サーバー → ハブ → ブラウザ） */
 export type WallAction =
   | { action: "load"; id: string }
@@ -49,6 +71,7 @@ export type WallAction =
   | { action: "snapshot" }
   | { action: "hit"; x: number; y: number }
   | { action: "reload" }
+  | { action: "audio"; music?: number; sfx?: number; styles?: Record<string, MusicStyle | null> }
   | { action: "calibration"; view: CalibView | null };
 
 /** 壁の画面に出す、合わせ込みの様子 */

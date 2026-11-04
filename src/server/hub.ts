@@ -15,13 +15,14 @@ import type { Homography } from "../input/calibration.ts";
 import { Calibrator, type CalibState, type CalibTarget } from "../input/calibrator.ts";
 import { DETECTOR_HELP, type DetectorOptions } from "../input/detector.ts";
 import { Pipeline } from "../input/pipeline.ts";
-import { type CalibView, type ClientMessage, HUB_PORT, type HubMessage, type WallAction } from "../shared/protocol.ts";
+import { type AudioSettings, type CalibView, type ClientMessage, DEFAULT_AUDIO, HUB_PORT, type HubMessage, MUSIC_STYLES, type MusicStyle, type WallAction } from "../shared/protocol.ts";
 import { Recorder } from "./recorder.ts";
 import { handTouch } from "../input/sim/simulator.ts";
 import { LidarSource, ReplaySource, type ScanSource, SimSource } from "./sources.ts";
 
 const CALIBRATION_FILE = "config/calibration.json";
 const PARAMS_FILE = "config/params.json";
+const AUDIO_FILE = "config/audio.json";
 const DETECTOR_FILE = "config/detector.json";
 const LOST_AFTER_MS = 500;
 
@@ -132,6 +133,29 @@ async function main(): Promise<void> {
     writeFileSync(PARAMS_FILE, `${JSON.stringify(savedParams, null, 2)}\n`);
   };
 
+  // 音の設定（音楽・効果音の音量、遊びごとの曲の雰囲気）も保存しておく
+  const audio: AudioSettings = { ...DEFAULT_AUDIO, styles: {} };
+  try {
+    Object.assign(audio, JSON.parse(readFileSync(AUDIO_FILE, "utf8")) as Partial<AudioSettings>);
+  } catch {
+    // まだ保存していなければ既定の値
+  }
+  const clamp10 = (v: number) => Math.max(0, Math.min(10, Math.round(v)));
+  /** 変更を混ぜて保存し、壁の画面に送る形（全部の値）にする */
+  const mergeAudio = (a: { music?: number; sfx?: number; styles?: Record<string, MusicStyle | null> }): WallAction => {
+    if (typeof a.music === "number") audio.music = clamp10(a.music);
+    if (typeof a.sfx === "number") audio.sfx = clamp10(a.sfx);
+    for (const [id, st] of Object.entries(a.styles ?? {})) {
+      if (st === null) delete audio.styles[id];
+      else if (st in MUSIC_STYLES) audio.styles[id] = st;
+      else throw new Error(`知らない曲の雰囲気です: ${st}（${Object.keys(MUSIC_STYLES).join("、")}）`);
+    }
+    mkdirSync("config", { recursive: true });
+    writeFileSync(AUDIO_FILE, `${JSON.stringify(audio, null, 2)}\n`);
+    return { action: "audio", music: audio.music, sfx: audio.sfx, styles: { ...audio.styles } };
+  };
+  const audioAction = (): WallAction => ({ action: "audio", music: audio.music, sfx: audio.sfx, styles: { ...audio.styles } });
+
   // ---- 合わせ込み ----
   const calibrator = new Calibrator();
   const calibView = (st: CalibState): CalibView | null =>
@@ -190,6 +214,7 @@ async function main(): Promise<void> {
           clients: [...roles.values()],
           last10s: lastStats,
           params: savedParams,
+          audio,
           detector: last ? { learning: last.learning, tracks: last.tracks.length, blobs: last.blobs.length } : null,
         });
       }
@@ -199,7 +224,16 @@ async function main(): Promise<void> {
         return json(200, { t: last?.t ?? null, learning: last?.learning ?? true, tracks: last?.tracks ?? [], blobs: last?.blobs ?? [] });
       }
       if (req.method === "POST" && req.url === "/api/wall") {
-        const a = JSON.parse(await readBody(req)) as WallAction;
+        let a = JSON.parse(await readBody(req)) as WallAction;
+        if (a.action === "audio") {
+          try {
+            a = mergeAudio(a);
+          } catch (e) {
+            return json(200, { ok: false, error: e instanceof Error ? e.message : String(e) });
+          }
+          log("audio.set", { ...audio });
+          if (!wallClient()) return json(200, { ok: true, data: { ...audio, saved: true, wall: "壁の画面が開いていません。開いたときに反映します" } });
+        }
         if (a.action === "setParams") {
           savedParams[a.id] = { ...savedParams[a.id], ...a.values };
           saveParams();
@@ -293,6 +327,7 @@ async function main(): Promise<void> {
         if (m.role === "wall") {
           for (const [id, values] of Object.entries(savedParams))
             ws.send(JSON.stringify({ kind: "control", reqId: 0, action: "setParams", id, values } satisfies HubMessage));
+          ws.send(JSON.stringify({ kind: "control", reqId: 0, ...audioAction() } satisfies HubMessage));
           // 合わせ込みの途中で画面を開き直しても、続きが出るように
           if (calibrator.active)
             ws.send(JSON.stringify({ kind: "control", reqId: 0, action: "calibration", view: calibView(calibrator.state) } satisfies HubMessage));

@@ -72,3 +72,4 @@ config/params.json
 config/calibration.json
 config/detector.json
 config/games-meta.json
+config/audio.json

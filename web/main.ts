@@ -6,7 +6,8 @@ import type { GameDefinition } from "./engine/game.ts";
 import { CalibrationView } from "./engine/calibration-view.ts";
 import { WallInput } from "./engine/input.ts";
 import { Runtime } from "./engine/runtime.ts";
-import { unlockAudio } from "./engine/sound.ts";
+import { type MusicStyle, music } from "./engine/music.ts";
+import { recordWav, setMusicVolume, setVolume, unlockAudio, volumes } from "./engine/sound.ts";
 import { palette } from "./engine/style.ts";
 
 const params = new URLSearchParams(location.search);
@@ -110,6 +111,10 @@ const latency = () => {
   const part = (k: "hub" | "net" | "frame" | "total") => ({ p50: pct(xs.map((x) => x[k]), 0.5), p95: pct(xs.map((x) => x[k]), 0.95) });
   return { n: xs.length, hub: part("hub"), net: part("net"), frame: part("frame"), total: part("total") };
 };
+const audioState = () => {
+  const v = volumes();
+  return { music: Math.round(v.music * 10), sfx: Math.round(v.sfx * 10), playing: music.current || null };
+};
 const stats = () => ({
   game: runtime.current?.def.id ?? null,
   mode: draft ? "draft" : "wall",
@@ -122,6 +127,7 @@ const stats = () => ({
   fxObjects: runtime.fxLayer.children.length,
   latencyMs: input.latencies.length ? [...input.latencies].sort((a, b) => a - b)[Math.floor(input.latencies.length / 2)] : null,
   latency: latency(),
+  audio: audioState(),
   size: { width: app.screen.width, height: app.screen.height },
 });
 const games = () =>
@@ -132,6 +138,7 @@ const games = () =>
     ages: g.ages,
     input: g.input,
     description: g.description,
+    music: runtime.musicStyleOf(g.id),
     params: Object.fromEntries(Object.entries(g.params).map(([k, p]) => [k, { label: p.label, value: p.value, min: p.min, max: p.max }])),
   }));
 
@@ -164,6 +171,12 @@ input.controlHandler = async (a) => {
     case "reload":
       setTimeout(() => location.reload(), 50);
       return true;
+    case "audio":
+      // ハブは保存してある設定をまとめて送ってくる
+      if (a.music !== undefined) setMusicVolume(a.music / 10);
+      if (a.sfx !== undefined) setVolume(a.sfx / 10);
+      if (a.styles) runtime.setMusicStyles(Object.fromEntries(Object.entries(a.styles).filter(([, v]) => v)) as Record<string, MusicStyle>);
+      return audioState();
   }
 };
 
@@ -175,4 +188,13 @@ window.__kabe = {
   /** 正規化座標で当たりを起こす */
   hit: (x: number, y: number) => input.inject(x, y),
   stats,
+  /** 確認用（?debug のときだけ）：音を録って base64 の WAV で返す */
+  recordAudio: debug
+    ? async (ms: number) => {
+        const b = new Uint8Array(await recordWav(ms));
+        let bin = "";
+        for (let k = 0; k < b.length; k += 0x8000) bin += String.fromCharCode(...b.subarray(k, k + 0x8000));
+        return btoa(bin);
+      }
+    : undefined,
 };

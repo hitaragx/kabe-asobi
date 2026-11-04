@@ -9,6 +9,7 @@ export default defineGame({
   rule: "的当て",
   ages: "3歳〜",
   input: "ボール",
+  music: "wa",
   params: {
     size: { value: 1, label: "うさぎの大きさ", min: 0.5, max: 2 },
     speed: { value: 1, label: "うさぎの動く速さ", min: 0, max: 2.5 },

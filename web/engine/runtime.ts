@@ -5,6 +5,7 @@ import type { GameContext, GameDefinition, GameInstance, Params, Zone } from "./
 import { Fx } from "./fx.ts";
 import type { Hit, WallInput } from "./input.ts";
 import { Motion, ease } from "./motion.ts";
+import { type MusicStyle, music } from "./music.ts";
 import { sound } from "./sound.ts";
 import { brights, fontFamily, lineWidth, palette } from "./style.ts";
 
@@ -87,6 +88,18 @@ export class Runtime {
     return this.height / 100;
   }
 
+  /** 職員が変えた曲の雰囲気（遊びの ID → 雰囲気） */
+  private musicStyles: Record<string, MusicStyle> = {};
+
+  /** その遊びで流す曲の雰囲気 */
+  musicStyleOf(id: string): MusicStyle {
+    return this.musicStyles[id] ?? this.games.get(id)?.music ?? "nonbiri";
+  }
+  setMusicStyles(styles: Record<string, MusicStyle>): void {
+    this.musicStyles = { ...styles };
+    if (this.current) music.play(this.musicStyleOf(this.current.def.id), this.current.def.id);
+  }
+
   register(def: GameDefinition): void {
     this.games.set(def.id, def);
   }
@@ -111,6 +124,7 @@ export class Runtime {
       const ctx = this.makeContext(def, scope);
       const inst = def.setup(ctx);
       this.current = { def, inst, scope };
+      music.play(this.musicStyleOf(id), id);
     } catch (e) {
       this.recordError(id, "setup", e);
       this.unload();
@@ -291,6 +305,7 @@ export class Runtime {
     // 待機状態
     const idle = performance.now() - this.input.lastInputAt;
     if (idle > this.opts.attractAfterMs && !this.attract) this.showAttract();
+    music.setIdle(idle > this.opts.attractAfterMs);
     if (idle > this.opts.resetAfterMs && cur) {
       this.input.lastInputAt = performance.now() - this.opts.attractAfterMs;
       this.load(cur.def.id, false);

@@ -27,6 +27,8 @@ description: 遊んでいる最中に職員から「もっと大きく」「ゆ�
 | 車いすの子・背の低い子がいる | `set_zones` で下の帯（例 y0:0.5〜y1:1）を大きくゆっくりにし、label を付ける。高さの値（row・top/bottom など）があれば、それも下げる |
 | 的を下に | row など高さの値。なければ下書きで出現位置を画面の下半分に |
 | 点数はいらない | showCount / showPercent などを false |
+| 音楽を小さく／止めて／音を大きく | `set_audio`。music（音楽）・sfx（効果音）は 0〜10。1回に2〜3段まで。止めるは music:0 |
+| 曲を変えて（和風に、にぎやかに など） | `set_audio` の styles で、いまの遊びの ID に雰囲気を指定（nonbiri／nigiyaka／wa／fushigi／kirakira／none） |
 | 対戦にして（小学生） | 新しい遊びとして作る（new-game スキル）。左右のチームで、それぞれの側に当てた数を競う |
 
 ## 伝え方

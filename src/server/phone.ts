@@ -12,7 +12,7 @@ import { networkInterfaces } from "node:os";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { HUB_PORT } from "../shared/protocol.ts";
+import { HUB_PORT, MUSIC_STYLES } from "../shared/protocol.ts";
 import { type Assistant, type AssistantEvent, ClaudeAssistant, MockAssistant } from "./assistant.ts";
 import { type GameVersion, linkRequest, readMeta } from "./games.ts";
 
@@ -90,12 +90,12 @@ const broadcast = (m: unknown) => {
 };
 
 // ---- 遊びの一覧に、作った日・頼みごと・理由をつける。新しく作った・直した順に並べる ----
-function withMeta(games: { id: string; title: string; ages: string; rule: string }[]) {
+function withMeta(games: { id: string; title: string; ages: string; rule: string; music?: string }[]) {
   const meta = readMeta();
   return games
-    .map(({ id, title, ages, rule }) => {
+    .map(({ id, title, ages, rule, music }) => {
       const m = meta[id];
-      return { id, title, ages, rule, createdAt: m?.createdAt ?? null, updatedAt: m?.updatedAt ?? null, versions: m ? [...m.versions].reverse() : [] };
+      return { id, title, ages, rule, music, createdAt: m?.createdAt ?? null, updatedAt: m?.updatedAt ?? null, versions: m ? [...m.versions].reverse() : [] };
     })
     .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0) || a.title.localeCompare(b.title, "ja"));
 }
@@ -156,8 +156,10 @@ const server = createServer(async (req, res) => {
         sensor: status.ok ? status.sensor : "unknown",
         wallOpen: Boolean(status.wallOpen),
         calibration: status.calibration ?? "none",
+        audio: status.ok ? status.audio : null,
+        musicStyles: MUSIC_STYLES,
         game: stats.ok ? stats.data.game : null,
-        games: games.ok ? withMeta(games.data as { id: string; title: string; ages: string; rule: string }[]) : [],
+        games: games.ok ? withMeta(games.data as { id: string; title: string; ages: string; rule: string; music?: string }[]) : [],
         error: status.ok ? undefined : status.error,
       });
     }
@@ -193,6 +195,10 @@ const server = createServer(async (req, res) => {
       const a = JSON.parse((await readBody(req)) || "{}") as { action: string; id?: string };
       if (a.action === "back") return json(res, 200, await hub("/api/wall", { action: "back" }));
       if (a.action === "load" && a.id) return json(res, 200, await hub("/api/wall", { action: "load", id: a.id }));
+      if (a.action === "audio") {
+        const { music, sfx, style, id } = a as { music?: number; sfx?: number; style?: string | null; id?: string };
+        return json(res, 200, await hub("/api/wall", { action: "audio", music, sfx, styles: id && style !== undefined ? { [id]: style } : undefined }));
+      }
       if (a.action === "calibrate") return json(res, 200, await hub("/api/calibration/start", {}));
       if (a.action === "calibrate-status") return json(res, 200, await hub("/api/calibration"));
       if (a.action === "calibrate-cancel") return json(res, 200, await hub("/api/calibration/cancel", {}));
