@@ -46,6 +46,8 @@ function refreshSnapshot() {
   const img = new Image();
   img.onload = () => {
     $("wall-img").src = img.src;
+    // 枠を壁と同じ縦横の比にする（端の表示が切れないように）
+    if (img.naturalWidth && img.naturalHeight) $("wall").style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
     snapLoading = false;
   };
   img.onerror = () => (snapLoading = false);

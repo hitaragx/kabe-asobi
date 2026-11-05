@@ -140,6 +140,8 @@ export class ClaudeAssistant implements Assistant {
   readonly kind = "claude" as const;
   private sessionId: string | undefined;
   private planSeq = 0;
+  /** 会話のこれまでの費用。SDK の total_cost_usd は、続きの会話では前の分も足した合計になるので、差を1回分にする */
+  private sessionCost = 0;
 
   constructor(
     private readonly cwd: string,
@@ -149,6 +151,7 @@ export class ClaudeAssistant implements Assistant {
 
   reset(): void {
     this.sessionId = undefined;
+    this.sessionCost = 0;
   }
 
   async send(prompt: string, emit: (e: AssistantEvent) => void, signal: AbortSignal): Promise<void> {
@@ -280,7 +283,10 @@ export class ClaudeAssistant implements Assistant {
         } else if (m.type === "result") {
           this.sessionId = m.session_id;
           const final = m.subtype === "success" ? m.result : text;
-          emit({ type: "done", text: final || text, costUsd: m.total_cost_usd, seconds: (Date.now() - t0) / 1000, turns: m.num_turns });
+          const total = m.total_cost_usd;
+          const costUsd = total >= this.sessionCost ? total - this.sessionCost : total;
+          this.sessionCost = total;
+          emit({ type: "done", text: final || text, costUsd, seconds: (Date.now() - t0) / 1000, turns: m.num_turns });
           return;
         }
       }
