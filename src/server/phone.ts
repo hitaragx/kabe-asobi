@@ -13,7 +13,7 @@ import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { HUB_PORT, MUSIC_STYLES } from "../shared/protocol.ts";
-import { type Assistant, type AssistantEvent, ClaudeAssistant, MockAssistant } from "./assistant.ts";
+import { type Assistant, type AssistantEvent, ClaudeAssistant, MockAssistant, type Plan } from "./assistant.ts";
 import { type GameVersion, linkRequest, readMeta } from "./games.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -46,7 +46,7 @@ const assistant: Assistant =
 const KEY = args.key ?? randomBytes(4).toString("hex");
 
 // ---- 会話の記録（画面を開き直しても続きが見えるように。ファイルは logs/ に、リポジトリには入れない） ----
-type Turn = { role: "staff" | "claude"; text: string; steps?: string[]; at: number; seconds?: number; costUsd?: number; error?: string };
+type Turn = { role: "staff" | "claude"; text: string; steps?: string[]; plan?: Plan; at: number; seconds?: number; costUsd?: number; error?: string };
 const history: Turn[] = [];
 mkdirSync(join(ROOT, "logs"), { recursive: true });
 const logFile = join(ROOT, "logs", `phone-${new Date().toISOString().slice(0, 10)}.jsonl`);
@@ -79,6 +79,16 @@ const requests: RequestRecord[] = existsSync(requestsFile)
   : [];
 
 let busy: AbortController | null = null;
+
+/**
+ * 職員の返事を待っている案。「これで作って」を押すと作り始める。
+ * request は、きろくに残す元の頼みごと（案を直してもらった言葉も足していく）
+ */
+let pendingPlan: { plan: Plan; request: string } | null = null;
+
+/** この言葉が出たら、遊びを書き始めた（壁に「つくってるよ」を出す） */
+const BUILD_STEPS = new Set(["遊びを書いています", "遊びを確かめています", "子どもの目線で確かめています"]);
+const making = (state: "start" | "done" | "off") => hub("/api/wall", { action: "making", state });
 
 // ---- 裏側の画面（動画用）：Claude が何をしているかを、見ている画面すべてに配る ----
 type Run = { id: number; prompt: string; startedAt: number; seconds?: number; costUsd?: number; turns?: number; ok?: boolean; events: AssistantEvent[] };
@@ -153,6 +163,7 @@ const server = createServer(async (req, res) => {
       return json(res, 200, {
         assistant: assistant.kind,
         busy: busy !== null,
+        pendingPlan: pendingPlan?.plan.id ?? null,
         sensor: status.ok ? status.sensor : "unknown",
         wallOpen: Boolean(status.wallOpen),
         calibration: status.calibration ?? "none",
@@ -212,13 +223,15 @@ const server = createServer(async (req, res) => {
       if (busy) return json(res, 409, { error: "いま作業中です" });
       assistant.reset();
       history.length = 0;
+      pendingPlan = null;
       return json(res, 200, { ok: true });
     }
 
     // ---- 話しかける（返事は少しずつ送る：Server-Sent Events） ----
     if (req.method === "POST" && url.pathname === "/api/chat") {
-      const { text } = JSON.parse((await readBody(req)) || "{}") as { text?: string };
+      const { text, approve } = JSON.parse((await readBody(req)) || "{}") as { text?: string; approve?: string };
       if (!text?.trim()) return json(res, 400, { error: "空です" });
+      if (approve && approve !== pendingPlan?.plan.id) return json(res, 409, { error: "この案は、もう古くなっています。もう一度頼んでください" });
       if (busy) return json(res, 409, { error: "いま作業中です。終わるまで待ってください" });
       const ac = new AbortController();
       busy = ac;
@@ -232,8 +245,28 @@ const server = createServer(async (req, res) => {
       history.push(staff);
       record(staff);
       const reply: Turn = { role: "claude", text: "", steps: [], at: Date.now() };
-      await assistant.send(staff.text, (e) => {
-        if (e.type === "step") reply.steps!.push(e.text);
+      const prev = pendingPlan;
+      pendingPlan = null;
+      // 案を直してもらう言葉なら、元の頼みごとに足す（関係ない調整なら、その言葉だけ）
+      const revised = prev ? `${prev.request}／${staff.text}` : staff.text;
+      let built = Boolean(approve);
+      let planned = false;
+      if (built) void making("start");
+      // Claude への言葉。承認のときは、どの案かを添える
+      const prompt = approve && prev ? `この案で作ってください：「${prev.plan.title}」` : staff.text;
+      await assistant.send(prompt, (e) => {
+        if (e.type === "step") {
+          reply.steps!.push(e.text);
+          if (!built && BUILD_STEPS.has(e.text)) {
+            built = true;
+            void making("start");
+          }
+        }
+        if (e.type === "plan") {
+          reply.plan = e.plan;
+          pendingPlan = { plan: e.plan, request: approve && prev ? prev.request : revised };
+          planned = true;
+        }
         if (e.type === "text") reply.text += e.delta;
         if (e.type === "done") {
           reply.text = e.text || reply.text;
@@ -249,11 +282,20 @@ const server = createServer(async (req, res) => {
       }, ac.signal);
       history.push(reply);
       record(reply);
+      // 作るのを止めた・失敗したときは、同じ案でもう一度「これで作って」を押せるように残す
+      if (reply.error && approve && prev && !pendingPlan) pendingPlan = prev;
       // この頼みごとの間に壁に出た遊びに、頼みごとを結びつける
-      const touched = linkRequest(run.startedAt, run.prompt);
+      const madeNew = Object.values(readMeta()).some((g) => g.versions.some((v) => v.at >= run.startedAt && v.kind === "new"));
+      const request = approve && prev ? prev.request : prev && (planned || madeNew) ? revised : staff.text;
+      const touched = linkRequest(run.startedAt, request);
+      if (built) void making(touched.some((g) => g.kind !== "rollback") && !reply.error ? "done" : "off");
+      busy = null;
+      res.end();
+      // 案を見せただけのときは、きろくに残さない（「これで作って」を押したときに、元の頼みごとで残す）
+      if (planned && touched.length === 0) return;
       const rec: RequestRecord = {
         at: run.startedAt,
-        request: run.prompt,
+        request,
         reply: reply.error ? `うまくいきませんでした（${reply.error}）` : reply.text,
         seconds: reply.seconds,
         costUsd: reply.costUsd,
@@ -263,8 +305,6 @@ const server = createServer(async (req, res) => {
       };
       requests.push(rec);
       appendFileSync(requestsFile, `${JSON.stringify(rec)}\n`);
-      busy = null;
-      res.end();
       return;
     }
     json(res, 404, { error: "not found" });

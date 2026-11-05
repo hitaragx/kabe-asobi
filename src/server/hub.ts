@@ -124,6 +124,8 @@ async function main(): Promise<void> {
       ws.send(JSON.stringify({ kind: "control", reqId, ...a } satisfies HubMessage));
     });
 
+  let making: { state: "start" | "done" | "off"; at: number } = { state: "off", at: 0 };
+
   // 調整した値は保存しておき、画面が開き直しても引き継ぐ
   let savedParams: Record<string, Record<string, unknown>> = existsSync(PARAMS_FILE)
     ? (JSON.parse(readFileSync(PARAMS_FILE, "utf8")) as typeof savedParams)
@@ -225,6 +227,8 @@ async function main(): Promise<void> {
       }
       if (req.method === "POST" && req.url === "/api/wall") {
         let a = JSON.parse(await readBody(req)) as WallAction;
+        // 「つくってるよ」は覚えておく（遊びを壁に出すと画面が読み込み直されるので、つながり直したら送り直す）
+        if (a.action === "making") making = { state: a.state, at: Date.now() };
         if (a.action === "audio") {
           try {
             a = mergeAudio(a);
@@ -328,6 +332,10 @@ async function main(): Promise<void> {
           for (const [id, values] of Object.entries(savedParams))
             ws.send(JSON.stringify({ kind: "control", reqId: 0, action: "setParams", id, values } satisfies HubMessage));
           ws.send(JSON.stringify({ kind: "control", reqId: 0, ...audioAction() } satisfies HubMessage));
+          // 作っている途中・できた直後に画面が読み込み直されたら、表示を戻す
+          const since = Date.now() - making.at;
+          if ((making.state === "start" && since < 6 * 60_000) || (making.state === "done" && since < 2500))
+            ws.send(JSON.stringify({ kind: "control", reqId: 0, action: "making", state: making.state } satisfies HubMessage));
           // 合わせ込みの途中で画面を開き直しても、続きが出るように
           if (calibrator.active)
             ws.send(JSON.stringify({ kind: "control", reqId: 0, action: "calibration", view: calibView(calibrator.state) } satisfies HubMessage));

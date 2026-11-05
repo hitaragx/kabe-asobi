@@ -72,7 +72,9 @@ export type WallAction =
   | { action: "hit"; x: number; y: number }
   | { action: "reload" }
   | { action: "audio"; music?: number; sfx?: number; styles?: Record<string, MusicStyle | null> }
-  | { action: "calibration"; view: CalibView | null };
+  | { action: "calibration"; view: CalibView | null }
+  /** 壁の隅の「つくってるよ」表示。start で出す、done で「できた！」を見せて消す、off ですぐ消す */
+  | { action: "making"; state: "start" | "done" | "off" };
 
 /** 壁の画面に出す、合わせ込みの様子 */
 export interface CalibView {

@@ -88,3 +88,20 @@ header h1 { font-size:18px; margin:0; }
 .styles button { border:1px solid #d1d5db; background:#fff; border-radius:999px; padding:8px 14px; font-size:14px; }
 .styles button.on { background:var(--blue); border-color:var(--blue); color:#fff; font-weight:bold; }
 .note { font-size:12px; color:var(--sub); margin-top:8px; line-height:1.6; }
+.hello b { display:block; font-size:16px; color:var(--ink); margin-bottom:4px; }
+.examples { display:flex; flex-direction:column; gap:8px; margin:14px 0 0; text-align:left; }
+.examples button { border:2px solid #d6e9ff; background:#fff; border-radius:16px; padding:12px 14px; font-size:15px; line-height:1.45; color:var(--ink); }
+.examples button small { display:block; font-size:12px; color:var(--blue); font-weight:bold; margin-bottom:2px; }
+.examples button:active { transform:scale(.98); background:#eef7ff; }
+.plan { align-self:stretch; background:#fff; border:2px solid var(--blue); border-radius:18px; padding:14px; box-shadow:0 2px 8px rgba(63,167,255,.15); }
+.plan .k { font-size:12px; font-weight:bold; color:var(--blue); }
+.plan h3 { margin:2px 0 6px; font-size:19px; }
+.plan p { margin:0 0 8px; font-size:15px; line-height:1.6; }
+.plan ul { margin:0 0 12px; padding-left:1.2em; font-size:14px; line-height:1.7; }
+.plan .row { display:flex; gap:8px; }
+.plan .row button { flex:1; border:none; border-radius:999px; padding:13px 8px; font-size:15px; font-weight:bold; background:#eef2f7; }
+.plan .row button.primary { flex:1.4; background:var(--blue); color:#fff; }
+.menu button { display:flex; align-items:center; gap:12px; width:100%; text-align:left; border:1px solid #e5e7eb; background:#fff; border-radius:14px; padding:14px; margin-bottom:8px; font-size:16px; font-weight:bold; }
+.menu button span { font-size:24px; width:32px; text-align:center; }
+.menu button small { display:block; font-size:12px; color:var(--sub); font-weight:normal; margin-top:2px; }
+.menu button:disabled { opacity:.4; }

@@ -13,8 +13,6 @@
     <div class="status">
       <span id="st-sensor"><i class="dot"></i>センサー</span>
       <span id="st-wall"><i class="dot"></i>かべ</span>
-      <button id="btn-sound" class="log" aria-label="おと">🔊</button>
-      <button id="btn-log" class="log">きろく</button>
     </div>
   </header>
 
@@ -27,13 +25,13 @@
 
   <div class="actions">
     <button id="btn-back"><span>↩︎</span>さっきのに戻す</button>
-    <button id="btn-calib"><span>🎯</span>壁に合わせる</button>
     <button id="btn-games"><span>🧩</span>遊びをえらぶ</button>
+    <button id="btn-more"><span>⋯</span>そのほか</button>
   </div>
 
   <div class="chat" id="chat"></div>
 
-  <div class="suggest" id="suggest">
+  <div class="suggest" id="suggest" hidden>
     <button>もっと大きく</button>
     <button>ゆっくりに</button>
     <button>点数はいらない</button>
@@ -47,7 +45,7 @@
     <button type="submit" id="send" aria-label="送る">➤</button>
   </form>
 
-  <!-- 下から出る板：遊びの一覧・合わせ込み -->
+  <!-- 下から出る板：遊びの一覧・そのほか（おと・きろく・壁に合わせる） -->
   <div class="sheet-bg" id="sheet-bg" hidden></div>
   <div class="sheet" id="sheet" hidden>
     <div class="sheet-head"><b id="sheet-title"></b><button id="sheet-close">とじる</button></div>

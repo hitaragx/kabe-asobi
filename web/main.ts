@@ -5,6 +5,7 @@ import { Application, Graphics, Text } from "pixi.js";
 import type { GameDefinition } from "./engine/game.ts";
 import { CalibrationView } from "./engine/calibration-view.ts";
 import { WallInput } from "./engine/input.ts";
+import { MakingBadge } from "./engine/making-badge.ts";
 import { Runtime } from "./engine/runtime.ts";
 import { type MusicStyle, music } from "./engine/music.ts";
 import { recordWav, setMusicVolume, setVolume, sound, unlockAudio, volumes } from "./engine/sound.ts";
@@ -128,6 +129,7 @@ const stats = () => ({
   latencyMs: input.latencies.length ? [...input.latencies].sort((a, b) => a - b)[Math.floor(input.latencies.length / 2)] : null,
   latency: latency(),
   audio: audioState(),
+  making: making.current,
   size: { width: app.screen.width, height: app.screen.height },
 });
 const games = () =>
@@ -143,6 +145,7 @@ const games = () =>
   }));
 
 const calibView = new CalibrationView(app, [runtime.gameLayer, runtime.zoneLayer, runtime.fxLayer, runtime.uiLayer]);
+const making = new MakingBadge(app);
 
 input.controlHandler = async (a) => {
   switch (a.action) {
@@ -167,6 +170,9 @@ input.controlHandler = async (a) => {
       return await app.renderer.extract.base64({ target: app.stage, frame: app.screen.clone(), resolution: 0.5, format: "jpg", quality: 0.8 });
     case "calibration":
       calibView.set(a.view);
+      return true;
+    case "making":
+      making.set(a.state);
       return true;
     case "reload":
       setTimeout(() => location.reload(), 50);

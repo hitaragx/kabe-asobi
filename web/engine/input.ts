@@ -46,8 +46,19 @@ export class WallInput {
   private statusL = new Set<Listener<SensorStatus>>();
   private ws: WebSocket | null = null;
   private mouseId = -1;
+  private handler: ((a: WallAction) => Promise<unknown> | unknown) | null = null;
+  private handlerReady!: () => void;
+  /** 操作を受ける準備ができるまで待つ（つながった直後に届く保存済みの設定を、捨てないように） */
+  private readonly ready = new Promise<void>((r) => (this.handlerReady = r));
+
   /** 壁サーバーからの操作を受ける */
-  controlHandler: ((a: WallAction) => Promise<unknown> | unknown) | null = null;
+  get controlHandler(): ((a: WallAction) => Promise<unknown> | unknown) | null {
+    return this.handler;
+  }
+  set controlHandler(f: ((a: WallAction) => Promise<unknown> | unknown) | null) {
+    this.handler = f;
+    if (f) this.handlerReady();
+  }
 
   constructor(
     private readonly size: () => { width: number; height: number },
@@ -117,10 +128,11 @@ export class WallInput {
       const m = JSON.parse(String(ev.data)) as HubMessage;
       if (m.kind === "control") {
         const { kind: _k, reqId, ...action } = m;
-        Promise.resolve()
+        // 遊びの読み込みが終わるまでは待たせる（届いた順に処理する）
+        Promise.race([this.ready, new Promise((r) => setTimeout(r, 15000))])
           .then(() => {
-            if (!this.controlHandler) throw new Error("操作を受け付けていません");
-            return this.controlHandler(action as WallAction);
+            if (!this.handler) throw new Error("操作を受け付けていません");
+            return this.handler(action as WallAction);
           })
           .then(
             (data) => send({ kind: "reply", reqId, ok: true, data }),

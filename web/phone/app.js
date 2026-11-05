@@ -3,7 +3,7 @@
 
 const $ = (id) => document.getElementById(id);
 const chat = $("chat");
-let state = { busy: false, games: [], game: null };
+let state = { busy: false, games: [], game: null, pendingPlan: null };
 let streaming = false;
 
 // ---- 小道具 ----
@@ -35,6 +35,7 @@ async function refreshState() {
   $("wall-title").textContent = g ? g.title : "—";
   $("wall-empty").hidden = state.wallOpen;
   setBusy(state.busy || streaming);
+  updatePlans();
 }
 
 // ---- 壁の今の画面（1.5秒ごと） ----
@@ -57,6 +58,61 @@ function addMe(text) {
   chat.append(el("div", "msg me", text));
   scrollDown();
 }
+// 初めて開いたときの、頼み方の例（押すとそのまま頼める。作る前に案が出るので安心）
+const EXAMPLES = [
+  ["小さい子が多い日", "4歳くらいの子が10人います。ボールを当てて遊べるものを作って"],
+  ["小学生だけの日", "小学生が12人。2チームに分かれて対戦できる遊びにして"],
+  ["いろんな子がいる日", "車いすの子もいます。みんなで一緒に、手でタッチして遊べるものを"],
+  ["季節の行事", "お月見の季節なので、うさぎが出てくる遊びを作って"],
+];
+function showHello() {
+  chat.innerHTML = "";
+  const box = el("div", "hello");
+  box.append(el("b", "", "どんな遊びにしたいか、話しかけてください"));
+  box.append(document.createTextNode("どんな子が何人くらいいるかを言うと、合った遊びを考えます。作る前に案を見せます。"));
+  const list = el("div", "examples");
+  for (const [label, text] of EXAMPLES) {
+    const b = el("button");
+    b.append(el("small", "", label), document.createTextNode(`「${text}」`));
+    b.addEventListener("click", () => sendText(text));
+    list.append(b);
+  }
+  box.append(list);
+  chat.append(box);
+  $("suggest").hidden = true;
+}
+
+// 作る前の案。「これで作って」を押すまで、Claude は作らない
+function planCard(plan) {
+  const card = el("div", "plan");
+  card.dataset.plan = plan.id;
+  card.append(el("div", "k", "この遊びを作ろうと思います"), el("h3", "", plan.title), el("p", "", plan.summary));
+  const ul = el("ul");
+  for (const p of plan.points || []) ul.append(el("li", "", p));
+  card.append(ul);
+  const row = el("div", "row");
+  const fix = el("button", "", "なおしたい");
+  const ok = el("button", "primary", "これで作って");
+  fix.addEventListener("click", () => {
+    $("text").placeholder = "どこを変えたいですか？（例：もっと簡単に）";
+    $("text").focus();
+  });
+  ok.addEventListener("click", () => {
+    state.pendingPlan = null;
+    sendText("この案で作って", plan.id);
+  });
+  row.append(fix, ok);
+  card.append(row);
+  return card;
+}
+/** いま返事を待っている案だけ、ボタンを押せるようにする */
+function updatePlans() {
+  for (const card of chat.querySelectorAll(".plan")) {
+    const live = card.dataset.plan === state.pendingPlan && !streaming;
+    card.querySelector(".row").hidden = !live;
+  }
+}
+
 function addReply(turn) {
   if (turn.steps?.length) {
     const s = el("div", "steps");
@@ -65,17 +121,17 @@ function addReply(turn) {
   }
   if (turn.error) chat.append(el("div", "msg ai err", `うまくいきませんでした。もう一度言ってみてください。\n（${turn.error}）`));
   else if (turn.text) chat.append(el("div", "msg ai", turn.text));
+  if (turn.plan) chat.append(planCard(turn.plan));
   if (turn.seconds) chat.append(el("div", "meta", `${Math.round(turn.seconds)}秒`));
   scrollDown();
 }
 async function loadHistory() {
   const h = await api("/api/history");
   chat.innerHTML = "";
-  if (!h.length) {
-    chat.append(el("div", "hello", "どんな遊びにしたいか、話しかけてください。\n例：「4歳の子が10人。節分だから鬼にボールを当てる遊び」"));
-    return;
-  }
+  if (!h.length) return showHello();
+  $("suggest").hidden = false;
   for (const t of h) t.role === "staff" ? addMe(t.text) : addReply(t);
+  updatePlans();
 }
 
 function setBusy(b) {
@@ -83,27 +139,32 @@ function setBusy(b) {
   send.textContent = b ? "■" : "➤";
   send.classList.toggle("stop", b);
   send.setAttribute("aria-label", b ? "止める" : "送る");
-  for (const id of ["btn-back", "btn-calib", "btn-games"]) $(id).disabled = b;
+  for (const id of ["btn-back", "btn-games"]) $(id).disabled = b;
 }
 
-async function sendText(text) {
+async function sendText(text, approve) {
   text = text.trim();
   if (!text || streaming) return;
   streaming = true;
   setBusy(true);
+  $("suggest").hidden = false;
+  $("text").placeholder = "こんな遊びにしたい…";
   addMe(text);
+  updatePlans();
   const steps = el("div", "steps");
   const bubble = el("div", "msg ai");
   chat.append(steps);
   let current = null;
-  const r = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) });
+  const r = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, approve }) });
   if (!r.ok || !r.body) {
     const e = await r.json().catch(() => ({}));
     chat.append(el("div", "msg ai err", e.error || "送れませんでした"));
     streaming = false;
     setBusy(false);
+    refreshState();
     return;
   }
+  let plan = null;
   const reader = r.body.getReader();
   const dec = new TextDecoder();
   let buf = "";
@@ -128,11 +189,14 @@ async function sendText(text) {
       } else if (e.type === "text") {
         if (!bubble.isConnected) chat.append(bubble);
         bubble.textContent += e.delta;
+      } else if (e.type === "plan") {
+        plan = e.plan;
       } else if (e.type === "done") {
         if (current) current.className = "";
         for (const s of steps.children) if (!s.textContent.startsWith("✓")) s.textContent = `✓ ${s.textContent}`;
         if (e.text) bubble.textContent = e.text;
         if (!bubble.isConnected && bubble.textContent) chat.append(bubble);
+        if (plan) chat.append(planCard(plan));
         chat.append(el("div", "meta", `${Math.round(e.seconds)}秒`));
       } else if (e.type === "error") {
         if (current) current.className = "";
@@ -142,7 +206,9 @@ async function sendText(text) {
     }
   }
   streaming = false;
+  if (plan) state.pendingPlan = plan.id;
   setBusy(false);
+  updatePlans();
   refreshState();
   refreshSnapshot();
 }
@@ -363,15 +429,42 @@ async function showSound() {
   box.append(el("div", "note", "音の大きさは、すべての遊びで同じです。Claude に「音楽を小さくして」と頼んでも変えられます。"));
   openSheet("おと", box);
 }
-$("btn-sound").addEventListener("click", showSound);
+// ---- そのほか（毎日は使わないもの） ----
+function showMore() {
+  const box = el("div", "menu");
+  const item = (icon, label, note, fn, disabled) => {
+    const b = el("button");
+    const t = el("div");
+    t.append(document.createTextNode(label), el("small", "", note));
+    b.append(el("span", "", icon), t);
+    b.disabled = Boolean(disabled);
+    b.addEventListener("click", fn);
+    box.append(b);
+  };
+  const busyNow = streaming || state.busy;
+  item("🔊", "おと", "音楽と効果音の大きさ、曲の雰囲気", showSound);
+  item("📒", "きろく", "これまでの頼みごとと、作った遊び", showLog);
+  item("🎯", "壁に合わせる", "プロジェクターを動かしたとき（5分ほど）", startCalib, busyNow);
+  item("💬", "新しい会話にする", "Claude との話を、はじめからにする", async () => {
+    if (!confirm("いままでの話を消して、はじめからにしますか？（作った遊びは消えません）")) return;
+    const r = await api("/api/reset", {});
+    if (r.error) return alert(r.error);
+    closeSheet();
+    state.pendingPlan = null;
+    showHello();
+  }, busyNow);
+  openSheet("そのほか", box);
+}
+$("btn-more").addEventListener("click", async () => {
+  await refreshState();
+  showMore();
+});
 
 $("btn-games").addEventListener("click", async () => {
   await refreshState();
   showGames();
 });
-$("btn-log").addEventListener("click", showLog);
-
-$("btn-calib").addEventListener("click", async () => {
+async function startCalib() {
   const box = el("div", "calib");
   const big = el("div", "big", "準備しています…");
   const dots = el("div", "dots");
@@ -397,7 +490,7 @@ $("btn-calib").addEventListener("click", async () => {
   };
   show(st);
   calibTimer = setInterval(async () => show(await api("/api/action", { action: "calibrate-status" })), 700);
-});
+}
 
 // ---- 話して頼む（使える端末だけ。使えなければキーボードのマイクを案内） ----
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;

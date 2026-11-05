@@ -4,8 +4,20 @@
 //
 // 認証は APIキー（ANTHROPIC_API_KEY）。職員が使う画面なので、claude.ai のログインは使わない（Agent SDK の利用規定）。
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { createSdkMcpServer, query, tool } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
 import { HUB_PORT } from "../shared/protocol.ts";
+
+/** 作り始める前に職員に見せる、遊びの案 */
+export type Plan = {
+  id: string;
+  /** 遊びの名前（ひらがな多めで） */
+  title: string;
+  /** どんな遊びか（1〜2文） */
+  summary: string;
+  /** 遊び方と、頼みごとに合わせたところ（短く2〜4つ） */
+  points: string[];
+};
 
 /** 画面に送る出来事 */
 export type AssistantEvent =
@@ -15,6 +27,8 @@ export type AssistantEvent =
   | { type: "text"; delta: string }
   | { type: "done"; text: string; costUsd?: number; seconds: number; turns?: number }
   | { type: "error"; message: string }
+  /** 作り始める前の案。職員が「これで作って」を押すまで作らない */
+  | { type: "plan"; plan: Plan }
   /** 裏側の画面用：Claude が何をしたか（職員の画面には出さない） */
   | { type: "trace"; at: number; kind: TraceKind; label: string; detail?: string; ok?: boolean; sub?: boolean };
 
@@ -32,6 +46,9 @@ const STAFF_MODE = `
 # 職員モード
 いま話しかけているのは、児童館などの職員（エンジニアではない）。スマホの専用画面から話しかけている。
 - 返事は日本語で2〜3行。専門用語（コード、ファイル、パラメータ、デプロイ、エラーの中身）は使わない
+- **新しい遊びを作るとき・遊びを大きく作り変えるときは、書き始める前に必ず propose_plan で案を見せて、そこで返事を終える。** 職員が「この案で作って」と返したら作る。「ここを変えて」と返ったら案を直して、もう一度 propose_plan で見せる
+  - 案がいらないもの：大きさ・速さ・数など値の調整、音の調整、戻す、遊びの切り替え、壁への合わせ込み
+  - 職員が「確認しなくていい」「おまかせで」と言ったときは、案を省いて作ってよい
 - 遊びを作る・変えるときは new-game スキル、遊んでいる最中の調整は tune スキル、壁への合わせ込みは calibrate スキルの手順に従う
 - 壁に出す前に必ず verify_game で確かめ、壁に出すのは publish_game だけ
 - publish_game には必ず reason を付ける（なぜこの頼みごとから、この遊び・直し方にしたか。職員があとで「きろく」で読む）
@@ -44,6 +61,7 @@ const STAFF_MODE = `
 /** 道具の名前 → 職員に見せる一言 */
 function stepText(tool: string): string | null {
   const map: Record<string, string> = {
+    mcp__staff__propose_plan: "案をまとめています",
     mcp__wall__verify_game: "遊びを確かめています",
     mcp__wall__publish_game: "壁に出しています",
     mcp__wall__set_audio: "音を調整しています",
@@ -81,13 +99,46 @@ function stepText(tool: string): string | null {
 
 function shortName(tool: string): string {
   if (tool.startsWith("mcp__wall__")) return tool.slice(11);
+  if (tool.startsWith("mcp__staff__")) return tool.slice(12);
   if (tool === "Agent" || tool === "Task") return "サブエージェント";
   return tool;
+}
+
+/** 職員の画面に案を出す道具。スマホのサーバーの中で動く（壁サーバーとは別） */
+function staffServer(onPlan: (p: Omit<Plan, "id">) => void) {
+  return createSdkMcpServer({
+    name: "staff",
+    version: "1.0.0",
+    tools: [
+      tool(
+        "propose_plan",
+        "新しい遊びを作る前に、職員のスマホに遊びの案を見せる。職員が「この案で作って」と返すまで、遊びを書き始めない。言葉はやさしい日本語で、専門用語は使わない。",
+        {
+          title: z.string().describe("遊びの名前（ひらがな多めで短く。例：おにを やっつけろ）"),
+          summary: z.string().describe("どんな遊びか。1〜2文"),
+          points: z.array(z.string()).min(1).max(4).describe("遊び方と、頼みごとに合わせたところ。1つ20字くらいで2〜4つ（例：「勝ち負けは出さず、みんなで数える」「的は大きめ・ゆっくり」）"),
+        },
+        async (args) => {
+          onPlan(args);
+          return {
+            content: [
+              {
+                type: "text",
+                text: "職員のスマホに案を見せました。まだ遊びを書き始めないでください。返事は「こんな案でどうでしょう。よければ『これで作って』を押してください。変えたいところがあれば教えてください。」くらいの一言にして、ここで終えてください。",
+              },
+            ],
+          };
+        },
+        { alwaysLoad: true },
+      ),
+    ],
+  });
 }
 
 export class ClaudeAssistant implements Assistant {
   readonly kind = "claude" as const;
   private sessionId: string | undefined;
+  private planSeq = 0;
 
   constructor(
     private readonly cwd: string,
@@ -118,7 +169,11 @@ export class ClaudeAssistant implements Assistant {
           settingSources: ["project"],
           // 職員の画面では許可の確認を出せないので、許可されていない操作は断る
           permissionMode: "dontAsk",
-          allowedTools: ["Read", "Glob", "Grep", "Edit", "Write", "Skill", "Agent", "Task", "mcp__wall__*"],
+          allowedTools: ["Read", "Glob", "Grep", "Edit", "Write", "Skill", "Agent", "Task", "mcp__wall__*", "mcp__staff__*"],
+          // 壁サーバー（.mcp.json）に加えて、案を見せる道具
+          mcpServers: {
+            staff: staffServer((p) => emit({ type: "plan", plan: { id: `p${Date.now().toString(36)}${++this.planSeq}`, ...p } })),
+          },
           // 職員モードではシェルとWebは使わない（検証は壁サーバーの道具で行う）
           disallowedTools: ["Bash", "WebFetch", "WebSearch"],
           systemPrompt: { type: "preset", preset: "claude_code", append: STAFF_MODE },
@@ -202,6 +257,7 @@ export class ClaudeAssistant implements Assistant {
               if (block.name === "Skill") trace({ kind: "skill", label: `Skill：${inp.skill ?? inp.name ?? ""}`, sub });
               else if (block.name === "Agent" || block.name === "Task")
                 trace({ kind: "subagent", label: `サブエージェント：${inp.subagent_type ?? ""}`, detail: String(inp.description ?? ""), sub });
+              else if (block.name === "mcp__staff__propose_plan") trace({ kind: "mcp", label: "案を見せる：propose_plan", detail: String(inp.title ?? ""), sub });
               else if (block.name.startsWith("mcp__wall__")) {
                 const { id, ...rest } = inp;
                 const args = Object.keys(rest).length ? JSON.stringify(rest).slice(0, 90) : "";
@@ -288,12 +344,26 @@ export class MockAssistant implements Assistant {
         emit({ type: "step", text: "前の遊びに戻しています" });
         const r = await this.wall({ action: "back" });
         await say(r.ok ? "前の遊びに戻しました。" : "戻せる遊びがありませんでした。");
-      } else {
+      } else if (/この案で/.test(prompt)) {
         for (const s of ["手順を確認しています", "遊びを書いています", "遊びを確かめています", "壁に出しています"]) {
           emit({ type: "step", text: s });
           await wait(900);
         }
         await say("（仮の相手です）本物の Claude につなぐと、ここで新しい遊びが壁に出ます。");
+      } else {
+        // 新しい遊びの頼みごと：まず案を見せる
+        emit({ type: "step", text: "案をまとめています" });
+        await wait(700);
+        emit({
+          type: "plan",
+          plan: {
+            id: `mock${Date.now().toString(36)}`,
+            title: "（仮）おにを やっつけろ",
+            summary: "壁を歩く鬼に、ボールを当てる遊びです。当たると鬼が「まいった」と逃げていきます。",
+            points: ["勝ち負けは出さず、みんなで当てた数を数える", "鬼は大きめで、ゆっくり歩く", "節分らしい和風の音楽"],
+          },
+        });
+        await say("（仮の相手です）こんな案でどうでしょう。よければ「これで作って」を押してください。");
       }
       emit({ type: "done", text: "", seconds: (Date.now() - t0) / 1000 });
     } catch (e) {
