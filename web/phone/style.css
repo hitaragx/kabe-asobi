@@ -105,3 +105,17 @@ header h1 { font-size:18px; margin:0; }
 .menu button span { font-size:24px; width:32px; text-align:center; }
 .menu button small { display:block; font-size:12px; color:var(--sub); font-weight:normal; margin-top:2px; }
 .menu button:disabled { opacity:.4; }
+
+/* パソコンなど横長の画面：左に壁の様子とボタン、右に会話 */
+@media (min-width: 900px) and (orientation: landscape) {
+  body { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(360px,1fr); grid-template-rows:auto auto auto 1fr auto auto; column-gap:8px; }
+  header { grid-column:1 / -1; grid-row:1; }
+  .wall { grid-column:1; grid-row:2; align-self:start; max-height:calc(100dvh - 190px); width:auto; }
+  .actions { grid-column:1; grid-row:3; padding-top:12px; }
+  .chat { grid-column:2; grid-row:2 / 5; min-height:0; padding-right:16px; }
+  .suggest { grid-column:2; grid-row:5; flex-wrap:wrap; overflow:visible; }
+  .input { grid-column:2; grid-row:6; padding-right:16px; }
+  .hello { margin:8px 8px auto; }
+  .sheet { left:auto; right:16px; bottom:16px; width:min(520px, calc(100vw - 32px)); max-height:calc(100dvh - 32px); border-radius:20px; }
+  button:hover { filter:brightness(.97); }
+}

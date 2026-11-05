@@ -251,6 +251,8 @@ function closeSheet() {
 }
 $("sheet-close").addEventListener("click", closeSheet);
 $("sheet-bg").addEventListener("click", closeSheet);
+// パソコンでは Esc で閉じる
+document.addEventListener("keydown", (e) => e.key === "Escape" && !$("sheet").hidden && closeSheet());
 
 // ---- 遊びの一覧・詳しい画面・きろく ----
 const KIND = { new: "作った", update: "直した", rollback: "前の版に戻した" };
