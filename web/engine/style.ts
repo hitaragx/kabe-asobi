@@ -26,4 +26,5 @@ export function lineWidth(screenHeight: number): number {
 }
 
 /** 文字のスタイル（丸く太い字） */
-export const fontFamily = '"Hiragino Maru Gothic ProN", "Rounded Mplus 1c", "Arial Rounded MT Bold", sans-serif';
+// Mac は丸ゴシック。Windows には丸ゴシックが入っていないので、読みやすいゴシック（BIZ UDPゴシック → 游ゴシック → メイリオ）にする
+export const fontFamily = '"Hiragino Maru Gothic ProN", "Rounded Mplus 1c", "Arial Rounded MT Bold", "BIZ UDPGothic", "Yu Gothic UI", "Meiryo", sans-serif';

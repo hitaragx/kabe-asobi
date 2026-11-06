@@ -11,6 +11,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { chromium } from "playwright";
 import { HUB_PORT } from "../src/shared/protocol.ts";
+import { tool } from "../src/shared/run.ts";
 
 const args = process.argv.slice(2);
 const sim = args.includes("--sim");
@@ -43,8 +44,8 @@ const procs: ChildProcess[] = [];
 let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 try {
   if (sim) {
-    procs.push(spawn("npx", ["tsx", "src/server/hub.ts", "--source", "sim"], { stdio: "ignore" }));
-    procs.push(spawn("npx", ["vite", "--port", "5173", "--strictPort"], { stdio: "ignore" }));
+    procs.push(spawn(...tool("tsx", ["src/server/hub.ts", "--source", "sim"]), { stdio: "ignore" }));
+    procs.push(spawn(...tool("vite", ["--port", "5173", "--strictPort"]), { stdio: "ignore" }));
     await up(HUB);
     await up("http://127.0.0.1:5173");
     browser = await chromium.launch();

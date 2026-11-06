@@ -9,6 +9,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createWriteStream, mkdirSync } from "node:fs";
 import { chromium } from "playwright";
+import { tool } from "../src/shared/run.ts";
 
 const prompts = process.argv.slice(2);
 if (!prompts.length) {
@@ -32,9 +33,9 @@ mkdirSync("test-results", { recursive: true });
 mkdirSync("logs", { recursive: true });
 const phoneLog = createWriteStream("logs/rehearsal-phone.log");
 try {
-  procs.push(spawn("npx", ["tsx", "src/server/hub.ts", "--source", "sim"], { stdio: "ignore" }));
-  procs.push(spawn("npx", ["vite", "--port", "5173", "--strictPort"], { stdio: "ignore" }));
-  const phone = spawn("npx", ["tsx", "src/server/phone.ts", "--key", KEY], { stdio: ["ignore", "pipe", "pipe"] });
+  procs.push(spawn(...tool("tsx", ["src/server/hub.ts", "--source", "sim"]), { stdio: "ignore" }));
+  procs.push(spawn(...tool("vite", ["--port", "5173", "--strictPort"]), { stdio: "ignore" }));
+  const phone = spawn(...tool("tsx", ["src/server/phone.ts", "--key", KEY]), { stdio: ["ignore", "pipe", "pipe"] });
   phone.stdout!.pipe(phoneLog);
   phone.stderr!.on("data", (d) => {
     phoneLog.write(d);

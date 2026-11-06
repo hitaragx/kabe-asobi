@@ -12,6 +12,7 @@ import { mkdirSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { chromium } from "playwright";
 import { HUB_PORT } from "../src/shared/protocol.ts";
+import { tool } from "../src/shared/run.ts";
 
 const { values: opts, positionals } = parseArgs({
   allowPositionals: true,
@@ -68,11 +69,11 @@ async function main(): Promise<void> {
   // すでに動いていればそれを使う
   if (!(await up(`http://127.0.0.1:${HUB_PORT}`))) {
     const src = opts.replay ? ["--source", "replay", "--file", opts.replay] : ["--source", "sim", "--touches"];
-    start("npx", ["tsx", "src/server/hub.ts", ...src]);
+    start(...tool("tsx", ["src/server/hub.ts", ...src]));
     await waitUp(`http://127.0.0.1:${HUB_PORT}`);
   }
   if (!(await up(`http://127.0.0.1:${WEB_PORT}`))) {
-    start("npx", ["vite", "--port", String(WEB_PORT), "--strictPort"]);
+    start(...tool("vite", ["--port", String(WEB_PORT), "--strictPort"]));
     await waitUp(`http://127.0.0.1:${WEB_PORT}`);
   }
 

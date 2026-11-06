@@ -1,6 +1,7 @@
 // 編集の後（PostToolUse）。web/games/ の遊びを書き換えたら型チェックを走らせ、
 // 失敗したらその内容を Claude に返す（直してから verify_game へ進めるように）。
 import { execFile } from "node:child_process";
+import { join } from "node:path";
 
 let raw = "";
 process.stdin.on("data", (d) => (raw += d));
@@ -11,10 +12,12 @@ process.stdin.on("end", () => {
   } catch {
     process.exit(0);
   }
-  const p = String(input.tool_input?.file_path ?? input.tool_response?.filePath ?? "");
+  // Windows のパス（\ 区切り）も同じに見る
+  const p = String(input.tool_input?.file_path ?? input.tool_response?.filePath ?? "").replaceAll("\\", "/");
   if (!/(^|\/)web\/(games|engine)\/[^/]+\.ts$/.test(p)) process.exit(0);
   const cwd = process.env.CLAUDE_PROJECT_DIR || process.cwd();
-  execFile("npx", ["tsc", "--noEmit", "--pretty", "false"], { cwd, timeout: 60000 }, (err, stdout, stderr) => {
+  // npx を通さずに node で直接動かす（Windows でも動くように）
+  execFile(process.execPath, [join(cwd, "node_modules/typescript/bin/tsc"), "--noEmit", "--pretty", "false"], { cwd, timeout: 60000 }, (err, stdout, stderr) => {
     if (!err) {
       const out = {
         hookSpecificOutput: {

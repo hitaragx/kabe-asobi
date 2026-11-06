@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, renameSync, unlinkSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { chromium } from "playwright";
+import { tool, toolStdio } from "../src/shared/run.ts";
 
 const CAL = "config/calibration.json";
 const BACKUP = "config/calibration.json.bak";
@@ -26,8 +27,8 @@ const touch = (x: number, y: number) => fetch("http://127.0.0.1:8787/api/sim/tou
 let ok = false;
 if (existsSync(CAL)) renameSync(CAL, BACKUP);
 try {
-  procs.push(spawn("npx", ["tsx", "src/server/hub.ts", "--source", "sim", "--no-balls"], { stdio: "ignore" }));
-  procs.push(spawn("npx", ["vite", "--port", "5173", "--strictPort"], { stdio: "ignore" }));
+  procs.push(spawn(...tool("tsx", ["src/server/hub.ts", "--source", "sim", "--no-balls"]), { stdio: "ignore" }));
+  procs.push(spawn(...tool("vite", ["--port", "5173", "--strictPort"]), { stdio: "ignore" }));
   await waitUp("http://127.0.0.1:8787");
   await waitUp("http://127.0.0.1:5173");
   const browser = await chromium.launch();
@@ -36,7 +37,7 @@ try {
   await wait(2000);
 
   const client = new Client({ name: "calib-smoke", version: "0" });
-  await client.connect(new StdioClientTransport({ command: "npx", args: ["tsx", "src/mcp/wall-server.ts"] }));
+  await client.connect(new StdioClientTransport(toolStdio("tsx", ["src/mcp/wall-server.ts"])));
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     const r = (await client.callTool({ name, arguments: args })) as { content: { type: string; text?: string }[] };
     return JSON.parse(r.content.find((c) => c.type === "text")!.text!);

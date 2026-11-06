@@ -9,6 +9,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { chromium } from "playwright";
+import { tool, toolStdio } from "../src/shared/run.ts";
 
 const procs: ChildProcess[] = [];
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -33,8 +34,8 @@ const check = (name: string, ok: boolean, detail?: unknown) => {
 };
 
 try {
-  procs.push(spawn("npx", ["tsx", "src/server/hub.ts", "--source", "sim"], { stdio: "ignore" }));
-  procs.push(spawn("npx", ["vite", "--port", "5173", "--strictPort"], { stdio: "ignore" }));
+  procs.push(spawn(...tool("tsx", ["src/server/hub.ts", "--source", "sim"]), { stdio: "ignore" }));
+  procs.push(spawn(...tool("vite", ["--port", "5173", "--strictPort"]), { stdio: "ignore" }));
   await waitUp("http://127.0.0.1:8787");
   await waitUp("http://127.0.0.1:5173");
 
@@ -46,8 +47,7 @@ try {
 
   const client = new Client({ name: "smoke", version: "0" });
   await client.connect(new StdioClientTransport({
-      command: "npx",
-      args: ["tsx", "src/mcp/wall-server.ts"],
+      ...toolStdio("tsx", ["src/mcp/wall-server.ts"]),
       // 確認用に壁に出した記録は、本物の記録（config/games-meta.json）に混ぜない
       env: { ...(process.env as Record<string, string>), KABE_GAMES_META: "test-results/games-meta-smoke.json" },
     }));

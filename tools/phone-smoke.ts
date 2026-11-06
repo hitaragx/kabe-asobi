@@ -4,6 +4,7 @@
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { chromium } from "playwright";
+import { tool } from "../src/shared/run.ts";
 
 const procs: ChildProcess[] = [];
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -30,9 +31,9 @@ const wallParams = async () => {
 
 const startedAt = Date.now();
 try {
-  procs.push(spawn("npx", ["tsx", "src/server/hub.ts", "--source", "sim"], { stdio: "ignore" }));
-  procs.push(spawn("npx", ["vite", "--port", "5173", "--strictPort"], { stdio: "ignore" }));
-  procs.push(spawn("npx", ["tsx", "src/server/phone.ts", "--mock", "--key", KEY], { stdio: "ignore" }));
+  procs.push(spawn(...tool("tsx", ["src/server/hub.ts", "--source", "sim"]), { stdio: "ignore" }));
+  procs.push(spawn(...tool("vite", ["--port", "5173", "--strictPort"]), { stdio: "ignore" }));
+  procs.push(spawn(...tool("tsx", ["src/server/phone.ts", "--mock", "--key", KEY]), { stdio: "ignore" }));
   await waitUp("http://127.0.0.1:8787");
   await waitUp("http://127.0.0.1:5173");
   await waitUp("http://127.0.0.1:8790");

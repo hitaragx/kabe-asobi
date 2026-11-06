@@ -163,7 +163,9 @@ export class ClaudeAssistant implements Assistant {
     const tools = new Map<string, string>(); // 道具の呼び出しID → 名前
     const trace = (e: Omit<Extract<AssistantEvent, { type: "trace" }>, "type" | "at">) =>
       emit({ type: "trace", at: (Date.now() - t0) / 1000, ...e });
-    const rel = (p: unknown) => String(p ?? "").replace(`${this.cwd}/`, "");
+    // 画面に出すパスはリポジトリからの相対にする（Windows の \ 区切りも / にそろえる）
+    const root = `${this.cwd.replaceAll("\\", "/")}/`;
+    const rel = (p: unknown) => String(p ?? "").replaceAll("\\", "/").replace(root, "");
     try {
       const q = query({
         prompt,

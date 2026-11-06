@@ -5,6 +5,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, readFileSync, renameSync, unlinkSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { tool, toolStdio } from "../src/shared/run.ts";
 
 const FILE = "config/detector.json";
 const BAK = `${FILE}.bak`;
@@ -17,8 +18,8 @@ const check = (name: string, ok: boolean, detail?: unknown) => {
 };
 if (existsSync(FILE)) renameSync(FILE, BAK);
 try {
-  if (!existsSync("recordings/sample-hard.jsonl")) spawn("npx", ["tsx", "tools/make-sample.ts"], { stdio: "ignore" });
-  procs.push(spawn("npx", ["tsx", "src/server/hub.ts", "--source", "sim"], { stdio: "ignore" }));
+  if (!existsSync("recordings/sample-hard.jsonl")) spawn(...tool("tsx", ["tools/make-sample.ts"]), { stdio: "ignore" });
+  procs.push(spawn(...tool("tsx", ["src/server/hub.ts", "--source", "sim"]), { stdio: "ignore" }));
   for (let i = 0; i < 75; i++) {
     try {
       if ((await fetch("http://127.0.0.1:8787")).ok) break;
@@ -28,7 +29,7 @@ try {
   while (!existsSync("recordings/sample-hard.jsonl")) await wait(200);
   await wait(500);
   const client = new Client({ name: "tune-smoke", version: "0" });
-  await client.connect(new StdioClientTransport({ command: "npx", args: ["tsx", "src/mcp/wall-server.ts"] }));
+  await client.connect(new StdioClientTransport(toolStdio("tsx", ["src/mcp/wall-server.ts"])));
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     const r = (await client.callTool({ name, arguments: args })) as { content: { type: string; text?: string }[]; isError?: boolean };
     const t = r.content.find((c) => c.type === "text")?.text ?? "";

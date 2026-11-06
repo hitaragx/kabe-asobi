@@ -1,0 +1,5 @@
+# Windows で取り出しても改行を LF のままにする（コミット前フックなどのスクリプトが動かなくなるのを防ぐ）
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jsonl text eol=lf

@@ -16,7 +16,7 @@ for (const line of diff.split("\n")) {
 
 const listFile = join(homedir(), ".config", "kabe-asobi", "forbidden-words.txt");
 const words = existsSync(listFile)
-  ? readFileSync(listFile, "utf8").split("\n").map((s) => s.trim()).filter((s) => s && !s.startsWith("#"))
+  ? readFileSync(listFile, "utf8").split(/\r?\n/).map((s) => s.trim()).filter((s) => s && !s.startsWith("#"))
   : [];
 
 const rules = [
@@ -25,6 +25,8 @@ const rules = [
   [/\bgh[pousr]_[A-Za-z0-9]{30,}\b/, "GitHub のトークン"],
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, "秘密鍵"],
   [/\/Users\/[A-Za-z0-9._-]+\//, "Mac の絶対パス（ユーザー名が入る）"],
+  [/\b[A-Za-z]:\\{1,2}Users\\{1,2}[^\\\s"']+/i, "Windows の絶対パス（ユーザー名が入る）"],
+  [/\/home\/[A-Za-z0-9._-]+\//, "Linux の絶対パス（ユーザー名が入る）"],
 ];
 const me = userInfo().username;
 const host = hostname().replace(/\.local$/, "");

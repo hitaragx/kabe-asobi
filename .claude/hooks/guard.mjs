@@ -18,7 +18,8 @@ process.stdin.on("end", () => {
   };
 
   if (tool === "Edit" || tool === "Write" || tool === "MultiEdit" || tool === "NotebookEdit") {
-    const p = String(ti.file_path ?? ti.notebook_path ?? "");
+    // Windows のパス（\ 区切り）も同じに見る
+    const p = String(ti.file_path ?? ti.notebook_path ?? "").replaceAll("\\", "/");
     if (/(^|\/)web\/live\//.test(p)) {
       block("web/live/ は壁に映っている版なので、直接は編集しません。web/games/ の下書きを直し、verify_game で確かめてから publish_game で壁に出してください。");
     }
@@ -33,8 +34,8 @@ process.stdin.on("end", () => {
       [/\bgit\s+reset\s+--hard\b/, "git reset --hard は禁止です（作業が消えます）"],
       [/\bgit\s+clean\s+-[a-zA-Z]*f/, "git clean -f は禁止です（記録データなどが消えます）"],
       [/\bgit\s+branch\s+-D\b/, "ブランチの強制削除は禁止です"],
-      [/(^|[\s;&|])(cp|mv|tee)\b[^\n]*\sweb\/live\//, "web/live/ へは publish_game でだけ書き込みます"],
-      [/>\s*web\/live\//, "web/live/ へは publish_game でだけ書き込みます"],
+      [/(^|[\s;&|])(cp|mv|tee|copy|move)\b[^\n]*\sweb[\\/]live[\\/]/i, "web/live/ へは publish_game でだけ書き込みます"],
+      [/>\s*web[\\/]live[\\/]/, "web/live/ へは publish_game でだけ書き込みます"],
     ];
     for (const [re, msg] of rules) if (re.test(cmd)) block(`止めました：${msg}\nコマンド：${cmd.slice(0, 200)}`);
   }

@@ -15,6 +15,7 @@ import { z } from "zod";
 import { HUB_PORT, MUSIC_STYLES, type MusicStyle, type WallAction } from "../shared/protocol.ts";
 import { analyze, listRecordings, loadRecording } from "../input/analyze.ts";
 import { checkId, listGameFiles, noteVersion, publishFile, rollbackFile } from "../server/games.ts";
+import { tool } from "../shared/run.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 process.chdir(ROOT);
@@ -66,8 +67,7 @@ interface VerifyResult {
 function runVerify(id: string, seconds: number): Promise<VerifyResult> {
   return new Promise((resolve) => {
     execFile(
-      "npx",
-      ["tsx", "tools/verify.ts", id, "--draft", "--seconds", String(seconds)],
+      ...tool("tsx", ["tools/verify.ts", id, "--draft", "--seconds", String(seconds)]),
       { cwd: ROOT, timeout: 120000 },
       (_err, stdout) => {
         try {
