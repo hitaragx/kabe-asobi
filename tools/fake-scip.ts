@@ -1,7 +1,9 @@
 // 模擬の SCIP 2.0 サーバー。本物のセンサーの代わりに、模擬スキャンを SCIP で流す。
 // センサー接続まわり（再接続など）を、センサーなしで確かめるために使う。
 //
-//   npx tsx tools/fake-scip.ts [--port 10940] [--drop-after 秒]   （--drop-after で接続を切って再接続を試す）
+//   npx tsx tools/fake-scip.ts [--port 10940] [--drop-after 秒] [--silent-after 秒]
+//     --drop-after   接続を切る（切断からの再接続を試す）
+//     --silent-after 接続は保ったまま黙り込む（ケーブル抜け・電源の入れ直しの再現。見張りによる再接続を試す）
 
 import { createServer } from "node:net";
 import { parseArgs } from "node:util";
@@ -9,7 +11,9 @@ import { UST_20LX } from "../src/input/scan.ts";
 import { checksum, encode, SCIP_PORT } from "../src/input/scip.ts";
 import { Simulator, addRandomBalls } from "../src/input/sim/simulator.ts";
 
-const { values } = parseArgs({ options: { port: { type: "string", default: String(SCIP_PORT) }, "drop-after": { type: "string" } } });
+const { values } = parseArgs({
+  options: { port: { type: "string", default: String(SCIP_PORT) }, "drop-after": { type: "string" }, "silent-after": { type: "string" } },
+});
 const spec = UST_20LX;
 const sim = new Simulator({ seed: 21 });
 addRandomBalls(sim, { startMs: 1500, durationMs: 3600_000, players: 3, intervalMs: 1500 });
@@ -29,7 +33,9 @@ createServer((sock) => {
   console.log(JSON.stringify({ msg: "fake-scip.connect" }));
   let timer: NodeJS.Timeout | null = null;
   let buf = "";
+  let silent = false;
   if (values["drop-after"]) setTimeout(() => sock.destroy(), Number(values["drop-after"]) * 1000);
+  if (values["silent-after"]) setTimeout(() => (silent = true), Number(values["silent-after"]) * 1000);
   sock.on("data", (d) => {
     buf += d.toString("latin1");
     let i = buf.indexOf("\n");
@@ -62,7 +68,7 @@ createServer((sock) => {
           const t = Date.now() - t0;
           const s = sim.scanAt(t, seq++);
           sim.prune(t - 1000);
-          sock.write(distanceBlock(cmd, "99", s.ranges.slice(start, end + 1), t));
+          if (!silent) sock.write(distanceBlock(cmd, "99", s.ranges.slice(start, end + 1), t));
         }, spec.scanPeriodMs);
       } else {
         sock.write(`${cmd}\n${status("0E")}\n`);

@@ -33,6 +33,8 @@ export interface CalibState {
   checkErrorsCm: number[];
   /** 各点の当てはめのずれ（cm） */
   fitErrorsCm: number[];
+  /** 印を出したときから居座っている物体の数（足元・家具など。タッチの候補から外している） */
+  lingering: number;
 }
 
 export interface CalibOptions {
@@ -42,6 +44,8 @@ export interface CalibOptions {
   holdTolerance: number;
   /** 合格のずれ（cm） */
   passCm: number;
+  /** 押さえ終えてから、これだけ待っても離れなければ「手ではない」とみなす（ミリ秒） */
+  releaseMs: number;
 }
 
 export const DEFAULT_TARGETS: CalibTarget[] = [
@@ -57,23 +61,29 @@ export class Calibrator {
   readonly opts: CalibOptions;
   state: CalibState;
   private hold: { id: number; start: number; samples: { x: number; y: number }[] } | null = null;
-  private waitRelease = false;
+  /**
+   * 押さえ終えた物体。手が離れる（この id が消える）のを待ってから記録を確定し、次へ進む。
+   * 離れないまま時間がたてば、それは手ではなく居座る物体（足・家具）なので、記録を捨てて候補から外す
+   */
+  private pending: { id: number; index: number; pos: { x: number; y: number }; at: number } | null = null;
+  /** 印を出した時点で見えていた物体の id。居座っているものはタッチの候補にしない */
+  private ignore = new Set<number>();
+  private armed = false;
   onChange: ((s: CalibState) => void) | null = null;
 
   constructor(opts: Partial<CalibOptions> = {}) {
-    this.opts = { holdMs: 700, holdTolerance: 0.04, passCm: 5, ...opts };
+    this.opts = { holdMs: 700, holdTolerance: 0.04, passCm: 5, releaseMs: 3000, ...opts };
     this.state = this.initial([]);
   }
 
   private initial(targets: CalibTarget[]): CalibState {
-    return { phase: "idle", targets, active: 0, captured: targets.map(() => null), holdProgress: 0, message: "", homography: null, checkErrorsCm: [], fitErrorsCm: [] };
+    return { phase: "idle", targets, active: 0, captured: targets.map(() => null), holdProgress: 0, message: "", homography: null, checkErrorsCm: [], fitErrorsCm: [], lingering: 0 };
   }
 
   start(targets: CalibTarget[] = DEFAULT_TARGETS): void {
     if (targets.filter((t) => !t.check).length < 4) throw new Error("合わせ込みには4点以上の印が必要です");
     this.state = { ...this.initial(targets), phase: "collect", message: "光った まるを、手で タッチして 少し押さえてください" };
-    this.hold = null;
-    this.waitRelease = false;
+    this.rearm();
     this.emit();
   }
 
@@ -90,7 +100,15 @@ export class Calibrator {
     s.active = index;
     s.phase = s.targets[index]!.check ? "check" : "collect";
     s.message = `${index + 1}ばんの まるを、もう一度 タッチしてください`;
+    this.rearm();
     this.emit();
+  }
+
+  /** 次の印に進んだ：押さえの記録を捨て、次の update で「いま見えている物体」を居座りとして覚え直す */
+  private rearm(): void {
+    this.hold = null;
+    this.pending = null;
+    this.armed = false;
   }
 
   get active(): boolean {
@@ -101,12 +119,35 @@ export class Calibrator {
   update(tracks: Track[], t: number): void {
     if (!this.active) return;
     const s = this.state;
-    if (this.waitRelease) {
-      if (tracks.length === 0) this.waitRelease = false;
+    if (this.pending) {
+      const pd = this.pending;
+      if (!tracks.some((x) => x.id === pd.id)) {
+        // 手が離れた → 記録を確定して、次の印へ。ほかの物体が居座っていても進める
+        s.captured[pd.index] = pd.pos;
+        this.rearm();
+        this.advance();
+      } else if (t - pd.at > this.opts.releaseMs) {
+        // 離れない → 手ではなく、居座る物体。記録は捨てて候補から外し、同じ印をもう一度
+        this.ignore.add(pd.id);
+        this.pending = null;
+        this.hold = null;
+        s.message = "壁の前に 何かが あるようです。どけてから、もう一度 まるを タッチしてください";
+        this.emit();
+      }
       return;
     }
-    // 押さえている物体：いちばん長く見えているもの
-    const tr = [...tracks].sort((a, b) => a.firstSeen - b.firstSeen)[0];
+    if (!this.armed) {
+      // 印を出した時点で見えている物体（足元・家具・近距離のノイズ）は、タッチではないので候補から外す
+      this.ignore = new Set(tracks.map((x) => x.id));
+      this.armed = true;
+    }
+    const lingering = tracks.filter((x) => this.ignore.has(x.id)).length;
+    if (lingering !== s.lingering) {
+      s.lingering = lingering;
+      this.emit();
+    }
+    // 押さえている物体：印を出してから現れたもののうち、いちばん長く見えているもの
+    const tr = tracks.filter((x) => !this.ignore.has(x.id)).sort((a, b) => a.firstSeen - b.firstSeen)[0];
     if (!tr) {
       if (this.hold) {
         this.hold = null;
@@ -133,11 +174,11 @@ export class Calibrator {
     const xs = this.hold.samples.map((q) => q.x).sort((a, b) => a - b);
     const ys = this.hold.samples.map((q) => q.y).sort((a, b) => a - b);
     const pos = { x: xs[Math.floor(xs.length / 2)]!, y: ys[Math.floor(ys.length / 2)]! };
-    s.captured[s.active] = pos;
     s.holdProgress = 0;
+    this.pending = { id: this.hold.id, index: s.active, pos, at: t };
     this.hold = null;
-    this.waitRelease = true;
-    this.advance();
+    s.message = "手を はなしてください";
+    this.emit();
   }
 
   private advance(): void {

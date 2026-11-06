@@ -273,10 +273,13 @@ const server = createServer(async (req, res) => {
           reply.seconds = e.seconds;
           reply.costUsd = e.costUsd;
         }
-        if (e.type === "error") reply.error = e.message;
+        if (e.type === "error") {
+          reply.error = e.message;
+          if (e.costUsd !== undefined) reply.costUsd = e.costUsd;
+        }
         if (e.type !== "text") run.events.push(e);
         if (e.type === "done") Object.assign(run, { seconds: e.seconds, costUsd: e.costUsd, turns: e.turns, ok: true });
-        if (e.type === "error") run.ok = false;
+        if (e.type === "error") Object.assign(run, { ok: false, costUsd: e.costUsd ?? run.costUsd });
         broadcast({ kind: "event", runId: run.id, event: e });
         send(e);
       }, ac.signal);

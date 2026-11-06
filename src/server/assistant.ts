@@ -26,7 +26,7 @@ export type AssistantEvent =
   /** 返事の文字（少しずつ届く） */
   | { type: "text"; delta: string }
   | { type: "done"; text: string; costUsd?: number; seconds: number; turns?: number }
-  | { type: "error"; message: string }
+  | { type: "error"; message: string; costUsd?: number }
   /** 作り始める前の案。職員が「これで作って」を押すまで作らない */
   | { type: "plan"; plan: Plan }
   /** 裏側の画面用：Claude が何をしたか（職員の画面には出さない） */
@@ -284,11 +284,24 @@ export class ClaudeAssistant implements Assistant {
           if (m.message.content.some((b) => b.type === "tool_use") && !m.parent_tool_use_id) text = "";
         } else if (m.type === "result") {
           this.sessionId = m.session_id;
-          const final = m.subtype === "success" ? m.result : text;
           const total = m.total_cost_usd;
           const costUsd = total >= this.sessionCost ? total - this.sessionCost : total;
           this.sessionCost = total;
-          emit({ type: "done", text: final || text, costUsd, seconds: (Date.now() - t0) / 1000, turns: m.num_turns });
+          // 途中で止まった（費用の上限・手順の上限・実行エラー・API のエラー）ときは、成功として見せない
+          if (m.subtype !== "success" || m.is_error) {
+            const detail = (m.subtype === "success" ? m.result : m.errors?.join(" / ")) || m.subtype;
+            const message =
+              m.subtype === "error_max_budget_usd"
+                ? `1回の頼みごとの上限（$${this.opts.maxBudgetUsd ?? 3}）に届いたので、途中で止めました。もう一度、短く分けて頼んでみてください`
+                : m.subtype === "error_max_turns"
+                  ? "手順が長くなりすぎたので、途中で止めました。もう一度、短く分けて頼んでみてください"
+                  : "Claude の側で止まりました。少し待って、もう一度言ってみてください";
+            trace({ kind: "result", label: `Claude が止まりました：${m.subtype}`, detail: detail.slice(0, 300), ok: false });
+            console.error(`[assistant] ${m.subtype}: ${detail.slice(0, 500)}`);
+            emit({ type: "error", message, costUsd });
+            return;
+          }
+          emit({ type: "done", text: m.result || text, costUsd, seconds: (Date.now() - t0) / 1000, turns: m.num_turns });
           return;
         }
       }

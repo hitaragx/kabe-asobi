@@ -22,6 +22,8 @@ function scrollDown() {
 }
 
 // ---- 状態（センサー・壁・いまの遊び） ----
+/** 通信が切れて、会話を取り直す必要があるか */
+let needReload = false;
 async function refreshState() {
   try {
     state = await api("/api/state");
@@ -36,6 +38,11 @@ async function refreshState() {
   $("wall-empty").hidden = state.wallOpen;
   setBusy(state.busy || streaming);
   updatePlans();
+  // 通信が切れていた間に終わった返事を取り直す
+  if (needReload && !state.busy && !streaming) {
+    needReload = false;
+    loadHistory();
+  }
 }
 
 // ---- 壁の今の画面（1.5秒ごと） ----
@@ -157,7 +164,23 @@ async function sendText(text, approve) {
   const bubble = el("div", "msg ai");
   chat.append(steps);
   let current = null;
-  const r = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, approve }) });
+  let plan = null;
+  // 通信が切れたとき（スマホがスリープした・Wi-Fi が途切れた）。Claude は PC 側で作業を続けている
+  const lost = () => {
+    if (current) current.className = "";
+    chat.append(el("div", "msg ai err", "通信が切れました。Claude は作業を続けています。しばらくして画面を開き直すと、続きが見られます"));
+    needReload = true;
+  };
+  let r;
+  try {
+    r = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, approve }) });
+  } catch {
+    lost();
+    streaming = false;
+    setBusy(false);
+    refreshState();
+    return;
+  }
   if (!r.ok || !r.body) {
     const e = await r.json().catch(() => ({}));
     chat.append(el("div", "msg ai err", e.error || "送れませんでした"));
@@ -166,10 +189,10 @@ async function sendText(text, approve) {
     refreshState();
     return;
   }
-  let plan = null;
   const reader = r.body.getReader();
   const dec = new TextDecoder();
   let buf = "";
+  try {
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -207,6 +230,9 @@ async function sendText(text, approve) {
       scrollDown();
     }
   }
+  } catch {
+    lost();
+  }
   streaming = false;
   if (plan) state.pendingPlan = plan.id;
   setBusy(false);
@@ -217,7 +243,8 @@ async function sendText(text, approve) {
 
 $("form").addEventListener("submit", (ev) => {
   ev.preventDefault();
-  if (streaming) {
+  // ■：この画面で送った作業でも、開き直したあと（別の端末）でも止められる
+  if (streaming || state.busy) {
     api("/api/stop", {});
     return;
   }
@@ -516,8 +543,12 @@ $("mic").addEventListener("click", () => {
     $("text").placeholder = "キーボードのマイクで話せます";
   };
   rec.onend = () => {
+    // 言い終わったら、文を確かめてから ➤ で送ってもらう（聞き取りが途中で止まっても、そのまま送られないように）
     $("mic").classList.remove("on");
-    if ($("text").value.trim()) $("form").requestSubmit();
+    if ($("text").value.trim()) {
+      $("text").placeholder = "よければ ➤ を押してください";
+      $("send").focus();
+    }
   };
   rec.start();
 });
@@ -528,4 +559,10 @@ refreshState();
 refreshSnapshot();
 setInterval(refreshState, 3000);
 setInterval(refreshSnapshot, 1500);
-document.addEventListener("visibilitychange", () => !document.hidden && (refreshState(), refreshSnapshot()));
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  // スリープから戻ったとき：送っている途中でなければ、会話を取り直す（切れていた間の返事を出す）
+  if (!streaming) loadHistory();
+  refreshState();
+  refreshSnapshot();
+});

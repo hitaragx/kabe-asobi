@@ -22,7 +22,8 @@ export default defineGame({
     const r = unit * 7 * params.size;
     const balloons = new Set<Container>();
     // 風船ごとの大きさ（区画によって変わる）
-    const radius = new Map<Container, number>();
+    // WeakMap：消した風船は自動で忘れる（Map だと、長く動かすほど消した風船がたまり続ける）
+    const radius = new WeakMap<Container, number>();
     let popped = 0;
     const bg = sky(width, height, ctx.line);
     ctx.stage.addChild(bg);

@@ -51,6 +51,8 @@ export class Runtime {
   /** 遊びを切り替えた順番（戻すときに使う） */
   readonly history: string[] = [];
   current: Running | null = null;
+  /** いまの遊びを出した時刻（ミリ秒）。やり直し（値の変更・画面の大きさの変更）でも更新される */
+  loadedAt = 0;
 
   readonly gameLayer = new Container();
   /** 区画の境目と名前（遊びの上、演出の下） */
@@ -64,6 +66,8 @@ export class Runtime {
   private attract: Container | null = null;
   private statusText: Text | null = null;
   private overrides = new Map<string, Record<string, unknown>>();
+  /** setup で失敗した遊び。代わりを探すときに、失敗した遊びどうしで堂々めぐりにならないように */
+  private readonly failed = new Set<string>();
   private finishing = false;
 
   constructor(
@@ -76,6 +80,16 @@ export class Runtime {
     app.ticker.add((t) => this.tick(t.deltaMS));
     input.onDown(() => this.hideAttract());
     input.onStatus((s) => this.showStatus(s));
+    // 画面の大きさが変わったら（全画面にした・窓を動かした）、いまの遊びを今の大きさで作り直す。
+    // 遊びは setup のときの大きさで配置を決めるので、そのままだと絵と当たりの位置がずれる
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+    app.renderer.on("resize", () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        resizeTimer = null;
+        if (this.current) this.load(this.current.def.id, false);
+      }, 300);
+    });
   }
 
   get width(): number {
@@ -106,8 +120,33 @@ export class Runtime {
 
   /** 調整できる値を上書きする（MCP・tune から使う）。遊びはやり直しになる */
   setParams(id: string, values: Record<string, unknown>): void {
-    this.overrides.set(id, { ...this.overrides.get(id), ...values });
+    this.overrides.set(id, { ...this.overrides.get(id), ...this.clamp(id, values) });
     if (this.current?.def.id === id) this.load(id, false);
+  }
+
+  /** いまの値（遊びに書いてある元の値に、上書きを重ねたもの）。zones も含む */
+  paramsOf(id: string): Record<string, unknown> {
+    const def = this.games.get(id);
+    const out: Record<string, unknown> = {};
+    if (def) for (const [k, p] of Object.entries(def.params as Params)) out[k] = p.value;
+    return Object.assign(out, this.overrides.get(id));
+  }
+
+  /** 数の値は min〜max に収める（範囲外の値で遊びが壊れないように）。zones など params にない名前はそのまま */
+  private clamp(id: string, values: Record<string, unknown>): Record<string, unknown> {
+    const def = this.games.get(id);
+    if (!def) return values;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(values)) {
+      const p = (def.params as Params)[k];
+      if (p && typeof v === "number" && typeof p.value === "number") {
+        let n = Number.isFinite(v) ? v : p.value;
+        if (p.min !== undefined) n = Math.max(p.min, n);
+        if (p.max !== undefined) n = Math.min(p.max, n);
+        out[k] = n;
+      } else out[k] = v;
+    }
+    return out;
   }
 
   /** 遊びを切り替える。失敗したら前の遊びに戻す */
@@ -124,16 +163,21 @@ export class Runtime {
       const ctx = this.makeContext(def, scope);
       const inst = def.setup(ctx);
       this.current = { def, inst, scope };
+      this.loadedAt = Date.now();
       music.play(this.musicStyleOf(id), id);
     } catch (e) {
       this.recordError(id, "setup", e);
       this.unload();
-      if (prev && prev !== id) {
-        this.announceUi("まえの あそびに もどしました", 2500);
-        this.load(prev, false);
+      // 壁を空のままにしない：前の遊びに戻す。前の遊びがない（起動直後・値の変更で壊れた）なら、ほかの遊びを出す
+      const fallback = prev && prev !== id ? prev : [...this.games.keys()].find((k) => k !== id && !this.failed.has(k));
+      this.failed.add(id);
+      if (fallback) {
+        this.announceUi(prev && prev !== id ? "まえの あそびに もどしました" : "べつの あそびに しました", 2500);
+        this.load(fallback, false);
       }
       return false;
     }
+    this.failed.delete(id);
     if (pushHistory && this.history.at(-1) !== id) this.history.push(id);
     try {
       localStorage.setItem("kabe.game", id);

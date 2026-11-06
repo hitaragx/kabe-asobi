@@ -2,6 +2,14 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { checksum, decode, encode, parseDistances, parseParams, parseResponse, specFromParams } from "../src/input/scip.ts";
 import { LidarSource } from "../src/server/sources.ts";
+import { tool } from "../src/shared/run.ts";
+
+/** 模擬 SCIP サーバーを起動して、待ち受けを始めるまで待つ */
+async function startFake(port: number, ...extra: string[]): Promise<ChildProcess> {
+  const server = spawn(...tool("tsx", ["tools/fake-scip.ts", "--port", String(port), ...extra]), { stdio: "pipe" });
+  await new Promise<void>((resolve) => server.stdout!.on("data", (d) => String(d).includes("listen") && resolve()));
+  return server;
+}
 
 const line = (s: string) => `${s}${checksum(s)}`;
 
@@ -42,8 +50,7 @@ describe("模擬 SCIP サーバーにつなぐ", () => {
   const port = 20000 + Math.floor(Math.random() * 20000);
   let server: ChildProcess;
   beforeAll(async () => {
-    server = spawn("npx", ["tsx", "tools/fake-scip.ts", "--port", String(port), "--drop-after", "2"], { stdio: "pipe" });
-    await new Promise<void>((resolve) => server.stdout!.on("data", (d) => String(d).includes("listen") && resolve()));
+    server = await startFake(port, "--drop-after", "2");
   }, 20000);
   afterAll(() => server.kill());
 
@@ -66,5 +73,30 @@ describe("模擬 SCIP サーバーにつなぐ", () => {
     expect(scans).toBeGreaterThan(100);
     expect(logs).toContain("lidar.disconnect");
     expect(restarts).toBeGreaterThanOrEqual(1);
+  }, 15000);
+});
+
+describe("黙り込んだセンサー（ケーブル抜け・電源の入れ直し）", () => {
+  const port = 20000 + Math.floor(Math.random() * 20000);
+  let server: ChildProcess;
+  beforeAll(async () => {
+    server = await startFake(port, "--silent-after", "1");
+  }, 20000);
+  afterAll(() => server.kill());
+
+  it("接続は開いたままスキャンが途絶えても、見張りが切ってつなぎ直す", async () => {
+    const src = new LidarSource("127.0.0.1", port);
+    const logs: string[] = [];
+    src.onLog = (m) => logs.push(m);
+    let scans = 0;
+    await src.start(() => scans++);
+    // 1秒後に黙る → 2秒の見張り → つなぎ直し（新しい接続は1秒だけ届いて、また黙る）
+    await new Promise((r) => setTimeout(r, 5000));
+    src.stop();
+    expect(scans).toBeGreaterThan(30);
+    expect(logs).toContain("lidar.stall");
+    expect(logs.filter((m) => m === "lidar.connect").length).toBeGreaterThanOrEqual(2);
+    // 1つの接続につき、つなぎ直しは1回だけ（接続の嵐にならない）
+    expect(logs.filter((m) => m === "lidar.connect").length).toBeLessThanOrEqual(3);
   }, 15000);
 });

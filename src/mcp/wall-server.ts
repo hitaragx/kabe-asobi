@@ -84,6 +84,26 @@ const image = (path: string): Content => ({ type: "image", data: readFileSync(pa
 
 const server = new McpServer({ name: "kabe-wall", version: "0.1.0" });
 
+/**
+ * 値を変えたあと、壁にその遊びがまだ映っているか確かめる。
+ * 値のせいで遊びが壊れると、壁は別の遊びに切り替わる。それを「成功」と返さないため
+ */
+function checkStillShown(stats: unknown, id: string, okBody: Record<string, unknown>) {
+  const st = stats as { game?: string | null; errors?: { game: string; where: string; message: string }[] } | undefined;
+  if (!st || st.game === undefined || st.game === id) return result(text(okBody));
+  const err = st.errors?.filter((e) => e.game === id).at(-1);
+  return {
+    ...result(
+      text({
+        ok: false,
+        reason: `値を変えたら遊びが壊れたので、壁は「${st.game ?? "なし"}」に切り替わりました。値を元に戻すか（reset_params）、別の値にしてください`,
+        error: err ? `${err.where}: ${err.message}` : undefined,
+      }),
+    ),
+    isError: true,
+  };
+}
+
 server.registerTool(
   "wall_status",
   {
@@ -203,7 +223,8 @@ server.registerTool(
   },
   async ({ id, values }) => {
     const r = await wall({ action: "setParams", id, values });
-    return r.ok ? result(text({ ok: true, values })) : fail(r.error ?? "変えられませんでした");
+    if (!r.ok) return fail(r.error ?? "変えられませんでした");
+    return checkStillShown(r.data, id, { ok: true, values });
   },
 );
 
@@ -251,7 +272,8 @@ server.registerTool(
   },
   async ({ id, zones }) => {
     const r = await wall({ action: "setParams", id, values: { zones } });
-    return r.ok ? result(text({ ok: true, zones })) : fail(r.error ?? "設定できませんでした");
+    if (!r.ok) return fail(r.error ?? "設定できませんでした");
+    return checkStillShown(r.data, id, { ok: true, zones });
   },
 );
 

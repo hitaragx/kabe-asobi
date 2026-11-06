@@ -65,3 +65,37 @@ describe("合わせ込みの流れ", () => {
     expect(Math.max(...cal.state.checkErrorsCm)).toBeGreaterThan(10);
   });
 });
+
+describe("居座る物体があるときの合わせ込み", () => {
+  it("消えない物体があっても、職員が案内どおりにタッチし直せば合格する", () => {
+    const sim = new Simulator({ seed: 33, pose: { heading: Math.PI / 2 + 0.05, x: 1.0 } });
+    const det = new Detector(sim.spec);
+    const cal = new Calibrator();
+    cal.start();
+    // 背景を覚えた直後に現れて、ずっと消えない物体（壁ぎわに立った人のつもり）。印の位置とは離れた場所
+    sim.add(handTouch(0.5 * sim.wallWidth, 0.95 * sim.wallHeight, 1200, 60000));
+    // 職員：案内（いまの印・言葉）が変わるたびに、少し待ってからその印をタッチする
+    let lastKey = "";
+    let busyUntil = 0;
+    let touches = 0;
+    let sawLingering = false;
+    for (let ms = 0, seq = 0; ms < 40000 && cal.active; ms += 25) {
+      const r = det.process(sim.scanAt(ms, seq++));
+      if (r.learning) continue;
+      cal.update(r.tracks, ms);
+      if (cal.state.lingering > 0) sawLingering = true;
+      const key = `${cal.state.phase}:${cal.state.active}:${cal.state.message}`;
+      if (cal.active && ms >= busyUntil && key !== lastKey && !cal.state.message.includes("はなして")) {
+        lastKey = key;
+        const tg = DEFAULT_TARGETS[cal.state.active]!;
+        sim.add(handTouch(tg.x * sim.wallWidth, tg.y * sim.wallHeight, ms + 400, 1200));
+        busyUntil = ms + 400 + 1200 + 300;
+        touches++;
+      }
+    }
+    expect(sawLingering).toBe(true);
+    expect(cal.state.phase).toBe("done");
+    expect(touches).toBeGreaterThanOrEqual(6);
+    for (const e of cal.state.checkErrorsCm) expect(e).toBeLessThan(5);
+  });
+});

@@ -8,7 +8,7 @@ import { WallInput } from "./engine/input.ts";
 import { MakingBadge } from "./engine/making-badge.ts";
 import { Runtime } from "./engine/runtime.ts";
 import { type MusicStyle, music } from "./engine/music.ts";
-import { recordWav, setMusicVolume, setVolume, sound, unlockAudio, volumes } from "./engine/sound.ts";
+import { onAudioUnlock, recordWav, setMusicVolume, setVolume, sound, unlockAudio, volumes } from "./engine/sound.ts";
 import { palette } from "./engine/style.ts";
 
 const params = new URLSearchParams(location.search);
@@ -26,10 +26,9 @@ const runtime = new Runtime(app, input, {
   resetAfterMs: Number(params.get("reset") ?? 180000),
 });
 
-// 遊びを読み込む。1つ壊れていても、ほかの遊びは動くように1つずつ読み込む
-const loaders = draft
-  ? import.meta.glob<{ default: GameDefinition }>("./games/*.ts")
-  : import.meta.glob<{ default: GameDefinition }>("./live/*.ts");
+// 遊びを読み込む。1つ壊れていても、ほかの遊びは動くように1つずつ読み込む。
+// 下書きと本番で読み込みのモジュールを分けてあるのは、下書きの保存で壁が読み込み直されないようにするため（draft-games.ts）
+const { loaders } = draft ? await import("./draft-games.ts") : await import("./live-games.ts");
 const loadErrors: { file: string; message: string }[] = [];
 await Promise.all(
   Object.entries(loaders).map(async ([file, load]) => {
@@ -45,24 +44,26 @@ await Promise.all(
 const first = params.get("game") ?? localStorage.getItem("kabe.game") ?? [...runtime.games.keys()][0];
 if (first) runtime.load(runtime.games.has(first) ? first : [...runtime.games.keys()][0]!);
 
-// 音の有効化（ブラウザは最初の操作が必要。展示では --autoplay-policy=no-user-gesture-required で起動する）
+// 音の有効化。ブラウザは最初の操作が必要なことがあるので、まず試してみて、音が出せるようになったら覆いを消す。
+// 展示では --autoplay-policy=no-user-gesture-required で起動すれば（docs/manual.md）、操作なしでそのまま音が出る。
+// 壁の画面は publish_game のたびに読み込み直されるので、ここで試さないと、そのたびに覆いが戻って無音になる
 const unlock = document.getElementById("unlock");
-const doUnlock = () => {
-  unlockAudio();
-  unlock?.remove();
-};
-if (params.has("muted") || navigator.userActivation?.hasBeenActive) unlock?.remove();
-unlock?.addEventListener("pointerdown", doUnlock);
-window.addEventListener("pointerdown", doUnlock, { once: true });
-window.addEventListener("keydown", doUnlock, { once: true });
+onAudioUnlock(() => unlock?.remove());
+if (params.has("muted")) unlock?.remove();
+else unlockAudio();
+unlock?.addEventListener("pointerdown", unlockAudio);
+window.addEventListener("pointerdown", unlockAudio, { once: true });
+window.addEventListener("keydown", unlockAudio, { once: true });
 
-// 開発用：数字キーで遊びを切り替え、Backspace で前に戻す
-window.addEventListener("keydown", (e) => {
-  const ids = [...runtime.games.keys()];
-  const n = Number(e.key);
-  if (n >= 1 && n <= ids.length) runtime.load(ids[n - 1]!);
-  if (e.key === "Backspace") runtime.back();
-});
+// 開発用（?debug か ?draft のとき）：数字キーで遊びを切り替え、Backspace で前に戻す。
+// 壁に映しているときは効かないようにしてある（撮影中にキーボードに触れて遊びが変わらないように）
+if (debug || draft)
+  window.addEventListener("keydown", (e) => {
+    const ids = [...runtime.games.keys()];
+    const n = Number(e.key);
+    if (n >= 1 && n <= ids.length) runtime.load(ids[n - 1]!);
+    if (e.key === "Backspace") runtime.back();
+  });
 
 // FPS の計測
 const frameTimes: number[] = [];
@@ -118,6 +119,7 @@ const audioState = () => {
 };
 const stats = () => ({
   game: runtime.current?.def.id ?? null,
+  loadedAt: runtime.loadedAt,
   mode: draft ? "draft" : "wall",
   fps: Math.round(fps()),
   sensor: input.status,
@@ -141,7 +143,10 @@ const games = () =>
     input: g.input,
     description: g.description,
     music: runtime.musicStyleOf(g.id),
-    params: Object.fromEntries(Object.entries(g.params).map(([k, p]) => [k, { label: p.label, value: p.value, min: p.min, max: p.max }])),
+    // value は「いまの値」（set_params で変えたあとの値）。default は遊びに書いてある元の値
+    params: Object.fromEntries(
+      Object.entries(g.params).map(([k, p]) => [k, { label: p.label, value: runtime.paramsOf(g.id)[k] ?? p.value, default: p.value, min: p.min, max: p.max }]),
+    ),
   }));
 
 const calibView = new CalibrationView(app, [runtime.gameLayer, runtime.zoneLayer, runtime.fxLayer, runtime.uiLayer]);

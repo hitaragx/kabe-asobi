@@ -155,6 +155,9 @@ export class ReplaySource implements ScanSource {
  * 本物の測域センサ（SCIP 2.0、TCP）。
  * 接続が切れても、1秒〜5秒おきにつなぎ直し続ける（その間、画面は待機状態になる）。
  */
+/** これだけスキャンが来なければ、接続が死んだとみなす（本来は 25ms ごとに届く） */
+const STALL_MS = 2000;
+
 export class LidarSource implements ScanSource {
   readonly name = "lidar";
   /** 接続したときにセンサーから読んだ値で上書きする（同じオブジェクトを書き換える） */
@@ -194,6 +197,15 @@ export class LidarSource implements ScanSource {
       if (this.stopped) return;
       const c = new ScipClient(this.host, this.port);
       this.client = c;
+      // つなぎ直しは1つの接続につき1回だけ予約する（close と失敗の両方から予約されて、接続が増え続けないように）
+      let scheduled = false;
+      let watchdog: NodeJS.Timeout | null = null;
+      const reconnect = (ms: number) => {
+        if (scheduled || this.stopped) return;
+        scheduled = true;
+        if (watchdog) clearInterval(watchdog);
+        setTimeout(run, ms);
+      };
       try {
         await c.connect(3000);
         const vv = await c.command("VV");
@@ -205,16 +217,27 @@ export class LidarSource implements ScanSource {
         delay = 1000;
         c.onClose = () => {
           this.onLog?.("lidar.disconnect", {});
-          if (!this.stopped) setTimeout(run, delay);
+          reconnect(delay);
         };
+        let lastScanAt = Date.now();
         await c.streamMD(0, this.spec.steps - 1, (ranges) => {
+          lastScanAt = Date.now();
           onScan({ seq: this.seq++, t: Date.now(), ranges: cleanRanges(ranges, this.spec) });
         });
+        // 見張り：ケーブルを抜く・電源を入れ直すと、TCP は「開いたまま無音」になり close が来ない。
+        // スキャンが途絶えたら、こちらから切ってつなぎ直す（close → onClose → reconnect）
+        watchdog = setInterval(() => {
+          if (Date.now() - lastScanAt < STALL_MS) return;
+          this.onLog?.("lidar.stall", { detail: "スキャンが途絶えたので、つなぎ直します", silentMs: Date.now() - lastScanAt });
+          if (watchdog) clearInterval(watchdog);
+          watchdog = null;
+          c.close();
+        }, 500);
       } catch (e) {
         this.onLog?.("lidar.error", { error: e instanceof Error ? e.message : String(e), retryMs: delay });
         c.onClose = null;
         c.close();
-        if (!this.stopped) setTimeout(run, delay);
+        reconnect(delay);
         delay = Math.min(delay * 2, 5000);
       }
     };

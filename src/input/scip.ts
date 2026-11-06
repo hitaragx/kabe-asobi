@@ -125,11 +125,17 @@ export class ScipClient {
         reject(new Error(`センサーにつながりません（${this.host}:${this.port}、${timeoutMs}ms）`));
       }, timeoutMs);
       s.setNoDelay(true);
+      // ケーブルを抜かれても気づけるように（OS の keepalive。本命の見張りは LidarSource 側にある）
+      s.setKeepAlive(true, 1000);
+      let connected = false;
       s.once("connect", () => {
+        connected = true;
         clearTimeout(timer);
         resolve();
       });
-      s.once("error", (e) => {
+      // つながる前のエラーは connect() の失敗として返す。つながった後のエラーは close が続くので、そちらで扱う
+      s.on("error", (e) => {
+        if (connected) return;
         clearTimeout(timer);
         reject(e);
       });

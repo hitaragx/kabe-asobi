@@ -184,6 +184,8 @@ async function main(): Promise<void> {
       phase: st.phase,
       active: st.active,
       message: st.message,
+      /** 印を出したときから居座っている物体の数（足元・家具など）。タッチの候補からは外している */
+      lingering: st.lingering,
       targets: st.targets.map((t, i) => ({ ...t, captured: st.captured[i] ?? null })),
       checkErrorsCm: st.checkErrorsCm.map((e) => +e.toFixed(1)),
       fitErrorsCm: st.fitErrorsCm.map((e) => +e.toFixed(1)),
