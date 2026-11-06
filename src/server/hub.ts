@@ -358,9 +358,10 @@ async function main(): Promise<void> {
     if (pipeline.detector.isLearning) return;
     if (calibrator.active && pipeline.last) calibrator.update(pipeline.last.tracks, scan.t);
     setSensor("ok");
+    // 当たりの数は、合わせ込みの前でも数えられるよう、センサーの座標の段階で数える
+    downs += pipeline.last?.events.filter((e) => e.type === "down").length ?? 0;
     if (!frame) return;
     frames++;
-    downs += frame.events.filter((e) => e.type === "down").length;
     broadcast({ kind: "frame", frame: { ...frame, t_sent: Date.now() } });
   });
 
