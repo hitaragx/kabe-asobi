@@ -234,3 +234,6 @@
 - 判断が必要（公開前）：ライセンス／禁止語リストの作成（本人）／履歴の書き換え（9MB の記録・古い言い回し・readme-wip）をするか／花の遊び2つを残すか／main への取り込み
 - 職員モードで Claude が書き換えられる場所を `web/games/`・`web/engine/` に限り、`.env` は読めないようにした（SDK の許可ルール。`dontAsk` では `canUseTool` が呼ばれないので、ルールの形で）。本物の Claude で確認：web/games には書けて、.mcp.json は「許可がなくて止められた」と返った（11秒、$0.133）。断られた操作は裏側の画面に残る
 - 公開前のチェック（docs/release-checklist.md）、.env.example、README に写真3枚＋数字の表＋英語の要約＋「期間中にゼロから作った」、CLAUDE.md の流れに「案を見せる」「game-checker」を追加、requirements.md に「計画時点の記録。現状は README が正」の注記、.claude/settings.json の許可に足りなかった壁サーバーの道具を追加
+- 本人の判断：ライセンスは Apache-2.0（LICENSE・NOTICE・package.json・README）。花の遊び2つは見本に入れた（検証合格、見本は10）。履歴は書き換えた
+- 履歴の書き換え（ローカルで実施。バックアップは git bundle で保存）：9MB の模擬記録（recordings/sample-hard.jsonl）を全コミットから外し、古い言い回し（施設を「諦めた側」として描く文、「ベンダー」）を README・台本・要件・PROGRESS の過去の版から今の言い回しに置き換えた。readme-wip ブランチはリモートから削除。初回コミットは GitHub の署名が外れてハッシュだけ変わった（中身は同じ）ので、dev と main の両方を force push する（本人が実行）。.git は 2.4MB に
+- まだ本人の作業：禁止語リスト `~/.config/kabe-asobi/forbidden-words.txt` の作成（コミット前フックの検出がこれまで一度も働いていない）。作ったら `git log --all -p | grep -i -f ~/.config/kabe-asobi/forbidden-words.txt` で全履歴を確認する
