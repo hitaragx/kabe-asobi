@@ -136,6 +136,9 @@ function staffServer(onPlan: (p: Omit<Plan, "id">) => void) {
   });
 }
 
+/** 職員モードで Claude が書き換えてよい場所（リポジトリからの相対パス） */
+const WRITABLE = ["web/games/", "web/engine/"];
+
 export class ClaudeAssistant implements Assistant {
   readonly kind = "claude" as const;
   private sessionId: string | undefined;
@@ -182,6 +185,14 @@ export class ClaudeAssistant implements Assistant {
           },
           // 職員モードではシェルとWebは使わない（検証は壁サーバーの道具で行う）
           disallowedTools: ["Bash", "WebFetch", "WebSearch"],
+          // 書いてよいのは遊びと部品だけ。設定（.claude、.mcp.json、CLAUDE.md）や鍵（.env）には触れさせない
+          canUseTool: async (toolName, input) => {
+            const path = rel(input.file_path);
+            if ((toolName === "Edit" || toolName === "Write") && !WRITABLE.some((d) => path.startsWith(d)))
+              return { behavior: "deny", message: `${path} は職員モードでは書き換えられません。遊びは web/games/、部品は web/engine/ に書いてください` };
+            if (toolName === "Read" && /(^|\/)\.env(\.|$)/.test(path)) return { behavior: "deny", message: "鍵のファイルは読めません" };
+            return { behavior: "allow", updatedInput: input };
+          },
           systemPrompt: { type: "preset", preset: "claude_code", append: STAFF_MODE },
           model: this.opts.model ?? "claude-opus-5-5",
           maxBudgetUsd: this.opts.maxBudgetUsd ?? 3,

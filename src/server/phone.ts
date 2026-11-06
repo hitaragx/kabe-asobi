@@ -318,6 +318,13 @@ const server = createServer(async (req, res) => {
   }
 });
 
+server.on("error", (e: NodeJS.ErrnoException) => {
+  if (e.code === "EADDRINUSE") {
+    console.error(`ポート ${args.port} はもう使われています。前のスマホ画面のサーバーが動いたままではありませんか。止めてから、もう一度起動してください`);
+    process.exit(1);
+  }
+  throw e;
+});
 server.listen(Number(args.port), "0.0.0.0", () => {
   const ips = Object.values(networkInterfaces())
     .flat()

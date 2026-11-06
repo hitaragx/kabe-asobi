@@ -5,8 +5,24 @@
 壁に短焦点プロジェクターで遊びを映し、測域センサ（2D LiDAR）でボールや手が当たった場所をとらえます。
 遊びを作る・直す・壁に合わせる作業は Claude Code が受け持ち、職員はエンジニアでなくても使えます。
 
-> Built with Claude: Japan 2026 の応募作品です（開発中）。
+> Built with Claude: Japan 2026 の応募作品です。ハッカソン期間中（2026-11-03〜11-08）に、ゼロから Claude Code と作りました。
 > デモ動画：（提出時に追加します）
+
+<p align="center"><img src="docs/images/manual/wall-new-game.jpg" width="720" alt="壁に出た新しい遊び（おばけに光のボールを当てる）"></p>
+
+| 1. スマホで頼む → 案が出る | 2. 「これで作って」→ 作っている間も遊べる | 3. 壁に出た |
+|:---:|:---:|:---:|
+| <img src="docs/images/manual/phone-plan.jpg" width="220" alt="案のカード"> | <img src="docs/images/manual/phone-building.jpg" width="220" alt="作っている間"> | <img src="docs/images/manual/phone-built.jpg" width="220" alt="壁に出た"> |
+
+| はかったこと | 値 |
+|---|---|
+| 話しかけてから新しい遊びが壁に出るまで | 約2〜4分（案は約10秒） |
+| 「もっと大きく」などその場の調整 | 約10秒 |
+| 壁への合わせ込みのずれ | 0.4cm（模擬センサー） |
+| 「人が近くに立つと反応する」を Claude が自分で調整 | 余計な反応 131回 → 5回（25秒） |
+| 1回の頼みごとの費用 | 案 約$0.1、遊びを作る 約$0.3〜0.9、調整 約$0.05〜0.15（上限 $3） |
+
+**English:** *kabe-asobi* lets staff at children's centers create interactive wall games just by talking to Claude on a phone. A short-throw projector draws the game on a wall; a 2D LiDAR (SCIP 2.0) senses where balls and hands hit. Claude Code — through custom Skills, an MCP "wall server", a sub-agent that checks games from a child's point of view, and hooks — writes each game, verifies it automatically, calibrates the projection to the sensor, and tunes it on the spot ("make the targets bigger on the left for the little ones"). Everything is drawn and sounded from code (no external assets), and games that fail verification never reach the wall. Built from scratch during the hackathon; see the [manual](docs/manual.md) (Japanese).
 
 ---
 

@@ -17,6 +17,8 @@
                                games/  遊びの下書き（1遊び1ファイル。Claudeが書く場所）
                                live/   壁に出してよい遊び（publish_game でだけ更新する。直接編集しない）
                          src/mcp/wall-server.ts  壁サーバー（MCP）。Claudeが壁を扱う道具
+                         src/server/phone.ts + web/phone/  職員のスマホの画面（同じ Wi-Fi・合言葉つき）
+                           └ src/server/assistant.ts  Claude Agent SDK で、このリポジトリの Claude Code を職員モードで動かす
 ```
 
 - 言語は TypeScript に統一する（入力側も Node.js で動かす）
@@ -25,7 +27,8 @@
 
 ## コマンド
 
-- `npm run dev` … 模擬センサー＋ハブ＋ブラウザを起動（壁の画面は http://127.0.0.1:5173）
+- `npm run dev` … 模擬センサー＋ハブ＋ブラウザ＋スマホ画面を起動（壁の画面は http://127.0.0.1:5173）。`npm run dev:lidar` は本物のセンサーで
+- `npm run smoke:phone` … スマホ画面の通し確認、`npm run latency` … 反応の遅れの計測
 - `npm test` … 単体テスト（vitest）
 - `npm run typecheck` … 型チェック
 - `npm run verify -- <id> --draft` … 下書きの自動検証（エラー・FPS・スクリーンショット）
@@ -33,8 +36,9 @@
 
 ## 遊びを作る・直す流れ（壁サーバーの道具を使う）
 
+0. 職員から頼まれたときは、書き始める前に `propose_plan` で案（名前・遊び方・子どもに合わせたところ）を見せ、「これで作って」を待つ（値の調整・戻す・切り替えは案なしでよい）
 1. `web/games/<id>.ts` に `defineGame` で書く（見本：`web/games/balloons.ts`、`animal-band.ts`）。部品は `web/engine/` から使う
-2. `verify_game` で確かめる。スクリーンショットも見て、子どもに分かりやすいか確認する
+2. `verify_game` で確かめる。新しい遊びは、サブエージェント `game-checker` に子どもの目線で見てもらう（スクリーンショットの確認を含む）
 3. `publish_game` で壁に出す（検証に通らなければ壁は変わらない）
 4. 「もっと大きく」「ゆっくり」などは、まず `set_params`。params にない変更は下書きを直して再び `publish_game`
 5. 「さっきのに戻して」は `rollback_game`（同じ遊びの前の版）か `previous_game`（前の遊び）

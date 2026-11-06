@@ -325,7 +325,12 @@ async function main(): Promise<void> {
   wss.on("connection", (ws) => {
     ws.send(JSON.stringify({ kind: "status", sensor, source: source.name } satisfies HubMessage));
     ws.on("message", (data) => {
-      const m = JSON.parse(String(data)) as ClientMessage;
+      let m: ClientMessage;
+      try {
+        m = JSON.parse(String(data)) as ClientMessage;
+      } catch {
+        return; // 壊れたメッセージでハブ全体が落ちないように
+      }
       if (m.kind === "hello") {
         roles.set(ws, m.role);
         log("client.connect", { role: m.role, clients: wss.clients.size });
@@ -379,6 +384,13 @@ async function main(): Promise<void> {
     downs = 0;
   }, 10000);
 
+  http.on("error", (e: NodeJS.ErrnoException) => {
+    if (e.code === "EADDRINUSE") {
+      console.error(`ポート ${args.port} はもう使われています。前のハブ（npm run dev / dev:lidar / record）が動いたままではありませんか。止めてから、もう一度起動してください`);
+      process.exit(1);
+    }
+    throw e;
+  });
   http.listen(Number(args.port), "127.0.0.1", () => log("hub.listen", { port: Number(args.port) }));
 
   const shutdown = async () => {
