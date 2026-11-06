@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "scripts": {
     "dev": "concurrently -k -n hub,wall,phone \"tsx src/server/hub.ts --source sim\" \"vite\" \"tsx src/server/phone.ts\"",
     "hub": "tsx src/server/hub.ts",
