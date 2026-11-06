@@ -178,21 +178,15 @@ export class ClaudeAssistant implements Assistant {
           settingSources: ["project"],
           // 職員の画面では許可の確認を出せないので、許可されていない操作は断る
           permissionMode: "dontAsk",
-          allowedTools: ["Read", "Glob", "Grep", "Edit", "Write", "Skill", "Agent", "Task", "mcp__wall__*", "mcp__staff__*"],
+          // 書いてよいのは遊びと部品だけ（dontAsk なので、それ以外の Edit/Write は断られる）
+          allowedTools: ["Read", "Glob", "Grep", ...WRITABLE.flatMap((d) => [`Edit(${d}**)`, `Write(${d}**)`]), "Skill", "Agent", "Task", "mcp__wall__*", "mcp__staff__*"],
           // 壁サーバー（.mcp.json）に加えて、案を見せる道具
           mcpServers: {
             staff: staffServer((p) => emit({ type: "plan", plan: { id: `p${Date.now().toString(36)}${++this.planSeq}`, ...p } })),
           },
           // 職員モードではシェルとWebは使わない（検証は壁サーバーの道具で行う）
-          disallowedTools: ["Bash", "WebFetch", "WebSearch"],
-          // 書いてよいのは遊びと部品だけ。設定（.claude、.mcp.json、CLAUDE.md）や鍵（.env）には触れさせない
-          canUseTool: async (toolName, input) => {
-            const path = rel(input.file_path);
-            if ((toolName === "Edit" || toolName === "Write") && !WRITABLE.some((d) => path.startsWith(d)))
-              return { behavior: "deny", message: `${path} は職員モードでは書き換えられません。遊びは web/games/、部品は web/engine/ に書いてください` };
-            if (toolName === "Read" && /(^|\/)\.env(\.|$)/.test(path)) return { behavior: "deny", message: "鍵のファイルは読めません" };
-            return { behavior: "allow", updatedInput: input };
-          },
+          // 鍵（.env）は読ませない。設定（.claude、.mcp.json、CLAUDE.md）は上の allowedTools に入っていないので書けない
+          disallowedTools: ["Bash", "WebFetch", "WebSearch", "Read(./.env)", "Read(./.env.*)", "Edit(./.env)", "Write(./.env)"],
           systemPrompt: { type: "preset", preset: "claude_code", append: STAFF_MODE },
           model: this.opts.model ?? "claude-opus-5-5",
           maxBudgetUsd: this.opts.maxBudgetUsd ?? 3,
@@ -298,6 +292,11 @@ export class ClaudeAssistant implements Assistant {
           const total = m.total_cost_usd;
           const costUsd = total >= this.sessionCost ? total - this.sessionCost : total;
           this.sessionCost = total;
+          // 許可されずに断られた操作（職員モードで書けない場所への Edit など）は、裏側の画面に残す
+          for (const d of m.permission_denials ?? []) {
+            const inp = (d.tool_input ?? {}) as Record<string, unknown>;
+            trace({ kind: "hook", label: `断られた操作：${d.tool_name}`, detail: rel(inp.file_path ?? inp.command ?? ""), ok: false });
+          }
           // 途中で止まった（費用の上限・手順の上限・実行エラー・API のエラー）ときは、成功として見せない
           if (m.subtype !== "success" || m.is_error) {
             const detail = (m.subtype === "success" ? m.result : m.errors?.join(" / ")) || m.subtype;
