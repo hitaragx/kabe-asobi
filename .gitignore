@@ -74,3 +74,28 @@ config/calibration.json
 config/detector.json
 config/games-meta.json
 config/audio.json
+
+# ===== 職員が作った遊び（施設のデータなのでリポジトリに入れない） =====
+# 入れるのは、はじめから入っている遊び（src/shared/presets.ts と同じ一覧）だけ
+web/games/*.ts
+web/live/*.ts
+!web/games/animal-band.ts
+!web/games/balloons.ts
+!web/games/bubbles.ts
+!web/games/cloud-clear.ts
+!web/games/hana-saku.ts
+!web/games/minna-hanabatake.ts
+!web/games/oni-taiji.ts
+!web/games/sakana.ts
+!web/games/team-battle.ts
+!web/games/tsukimi-usagi.ts
+!web/live/animal-band.ts
+!web/live/balloons.ts
+!web/live/bubbles.ts
+!web/live/cloud-clear.ts
+!web/live/hana-saku.ts
+!web/live/minna-hanabatake.ts
+!web/live/oni-taiji.ts
+!web/live/sakana.ts
+!web/live/team-battle.ts
+!web/live/tsukimi-usagi.ts

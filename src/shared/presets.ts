@@ -1,6 +1,7 @@
 // はじめから入っている遊び（見本）。職員の画面からは直せない・消せない。
 // 職員モードの Claude も書き換えられない（src/server/assistant.ts の許可ルール、壁サーバーの publish_game・rollback_game）。
 // 直したいときは、別の名前（ID）で新しい遊びとして作る。
+// 職員が作った遊びはリポジトリに入れない。.gitignore にも同じ一覧があるので、増やすときは両方に書く。
 export const PRESET_GAMES: readonly string[] = [
   "animal-band",
   "balloons",
