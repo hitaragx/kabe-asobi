@@ -29,5 +29,8 @@
 
 - [ ] dev を main に取り込む（`git checkout main && git merge dev`、push）。GitHub の既定ブランチが main で、README が表示されている
 - [ ] GitHub でリポジトリを public にする
-- [ ] 提出フォームに、リポジトリと動画の URL を書く
+- [ ] 動画：3分以内（超えた分は審査員が見ない）。書き出したものを最初から最後まで見て、音と映像のずれがないか確かめる
+- [ ] 動画を YouTube の限定公開（または Loom・Google ドライブ）に置き、「リンクを知っている全員」が見られるようにする。Safari のプライベートウインドウで再生できるか確かめる
+- [ ] 提出フォーム（CV プラットフォームの Submit Project）に、概要・リポジトリ・動画の URL を書く。設問がほかにもあることがあるので、先に開いて確かめる
+- [ ] 締切（11/8 20:00）より余裕を持って出し、「View Submission」で状態を確かめる
 - [ ] ハッカソンが終わったら、API キー（kabe-asobi-hackathon）を Claude Console で削除する
