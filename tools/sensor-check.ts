@@ -9,7 +9,7 @@ const c = new ScipClient(values.host!, Number(values.port));
 const say = (s: string) => console.log(s);
 
 try {
-  say(`1. ${values.host}:${values.port} につなぎます…`);
+  say(`1. ${values.host}:${values.port} につなぎます…${c.localAddress ? `（この PC の ${c.localAddress} から）` : ""}`);
   await c.connect(3000);
   say("   つながりました");
   const vv = await c.command("VV");

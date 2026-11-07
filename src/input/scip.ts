@@ -8,7 +8,8 @@
 //   \n（空行で1つの応答が終わる）
 // 距離は 1値3文字（6ビット×3）。各文字から 0x30 を引いた値を並べる。
 
-import { Socket } from "node:net";
+import { Socket, isIPv4 } from "node:net";
+import { networkInterfaces } from "node:os";
 import type { Scan, ScanSpec } from "./scan.ts";
 
 export const SCIP_PORT = 10940;
@@ -100,6 +101,25 @@ export function specFromParams(p: Record<string, string>): ScanSpec {
 }
 
 /**
+ * センサーにつなぐときに使う、この PC 側の番号を選ぶ。
+ * 家の Wi-Fi もセンサーと同じ番号帯（192.168.0.x）だと、通信が Wi-Fi の方へ出てしまい、センサーに届かない。
+ * 同じ番号帯の番号が2つ以上あるときは、LAN アダプタに入れる決まりの番号（.100）から送る。
+ * 環境変数 KABE_SENSOR_BIND で指定もできる（例：192.168.0.100）。1つしかないときは選ばない（ふつうの経路で届く）
+ */
+export function pickLocalAddress(host: string): string | undefined {
+  const fixed = process.env.KABE_SENSOR_BIND;
+  if (fixed) return fixed;
+  if (!isIPv4(host)) return undefined;
+  const prefix = host.split(".").slice(0, 3).join(".") + ".";
+  const same = Object.values(networkInterfaces())
+    .flat()
+    .filter((i) => i && i.family === "IPv4" && !i.internal && i.address.startsWith(prefix) && i.address !== host)
+    .map((i) => i!.address);
+  if (same.length < 2) return undefined;
+  return same.find((a) => a.endsWith(".100"));
+}
+
+/**
  * SCIP クライアント。
  * command() は1つの応答を待つ。streamMD() は MD コマンドで距離を受け続ける。
  */
@@ -114,6 +134,7 @@ export class ScipClient {
   constructor(
     readonly host: string,
     readonly port = SCIP_PORT,
+    readonly localAddress: string | undefined = pickLocalAddress(host),
   ) {}
 
   connect(timeoutMs = 3000): Promise<void> {
@@ -146,7 +167,7 @@ export class ScipClient {
         this.waiters = [];
         this.onClose?.(err);
       });
-      s.connect(this.port, this.host);
+      s.connect(this.localAddress ? { port: this.port, host: this.host, localAddress: this.localAddress } : { port: this.port, host: this.host });
     });
   }
 
