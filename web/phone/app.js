@@ -47,8 +47,25 @@ async function refreshState() {
 
 // ---- 壁の今の画面（1.5秒ごと） ----
 let snapLoading = false;
+// たたむと1行の帯になり、会話が広くなる（たたんだかどうかは、この端末に覚えておく）
+const FOLD_KEY = "kabe.wallFolded";
+function setWallFolded(folded) {
+  $("wall").classList.toggle("folded", folded);
+  $("wall-toggle").textContent = folded ? "ひらく ▼" : "たたむ ▲";
+  $("wall-toggle").setAttribute("aria-expanded", String(!folded));
+  try {
+    localStorage.setItem(FOLD_KEY, folded ? "1" : "0");
+  } catch {}
+  if (!folded) refreshSnapshot();
+}
+$("wall-toggle").addEventListener("click", () => setWallFolded(!$("wall").classList.contains("folded")));
+try {
+  if (localStorage.getItem(FOLD_KEY) === "1") setWallFolded(true);
+} catch {}
+
 function refreshSnapshot() {
-  if (snapLoading || document.hidden) return;
+  // たたんでいる間は、壁の画面を取りに行かない
+  if (snapLoading || document.hidden || $("wall").classList.contains("folded")) return;
   snapLoading = true;
   const img = new Image();
   img.onload = () => {

@@ -17,6 +17,15 @@ header h1 { font-size:18px; margin:0; }
 .wall .label { position:absolute; left:10px; top:10px; background:rgba(255,255,255,.92); border-radius:999px; padding:4px 10px; font-size:13px; font-weight:bold; }
 .wall .live { position:absolute; right:10px; top:10px; background:var(--red); color:#fff; border-radius:999px; padding:2px 8px; font-size:11px; font-weight:bold; }
 .wall-empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--sub); font-size:14px; background:#eef2f7; }
+/* スマホ：壁の様子は小さめにして、会話を広く取る。たたむと1行の帯になる */
+.wall { height:24dvh; max-width:calc(100% - 24px); align-self:center; margin:0 auto; }
+.wall-toggle { position:absolute; right:8px; bottom:8px; border:none; background:rgba(26,26,46,.72); color:#fff; border-radius:999px; padding:4px 10px; font-size:12px; font-weight:bold; }
+.wall.folded { height:40px; width:calc(100% - 24px); aspect-ratio:auto !important; background:var(--card); }
+.wall.folded img { display:none; }
+.wall.folded .label { top:50%; transform:translateY(-50%); background:none; padding:0 0 0 2px; }
+.wall.folded .live { top:50%; transform:translateY(-50%); right:92px; }
+.wall.folded .wall-empty { justify-content:flex-start; padding-left:12px; font-size:13px; background:var(--card); }
+.wall.folded .wall-toggle { top:50%; bottom:auto; transform:translateY(-50%); background:#eef2f7; color:var(--ink); }
 .actions { flex:none; display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:10px 12px 4px; }
 .actions button { border:none; border-radius:14px; padding:10px 4px; background:var(--card); font-size:13px; font-weight:bold; box-shadow:0 1px 4px rgba(0,0,0,.08); }
 .actions button:active { transform:scale(.97); }
@@ -110,7 +119,8 @@ header h1 { font-size:18px; margin:0; }
 @media (min-width: 900px) and (orientation: landscape) {
   body { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(360px,1fr); grid-template-rows:auto auto auto 1fr auto auto; column-gap:8px; }
   header { grid-column:1 / -1; grid-row:1; }
-  .wall { grid-column:1; grid-row:2; align-self:start; max-height:calc(100dvh - 190px); width:auto; }
+  .wall { grid-column:1; grid-row:2; align-self:start; height:auto; max-width:none; margin:0 12px; max-height:calc(100dvh - 190px); width:auto; }
+  .wall.folded { width:auto; }
   .actions { grid-column:1; grid-row:3; padding-top:12px; }
   .chat { grid-column:2; grid-row:2 / 5; min-height:0; padding-right:16px; }
   .suggest { grid-column:2; grid-row:5; flex-wrap:wrap; overflow:visible; }
