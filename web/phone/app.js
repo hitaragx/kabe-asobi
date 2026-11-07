@@ -174,7 +174,7 @@ async function sendText(text, approve) {
   streaming = true;
   setBusy(true);
   $("suggest").hidden = false;
-  $("text").placeholder = "こんな遊びにしたい…";
+  $("text").placeholder = PLACEHOLDER;
   addMe(text);
   updatePlans();
   const steps = el("div", "steps");
@@ -597,8 +597,15 @@ async function startCalib() {
   calibTimer = setInterval(async () => show(await api("/api/action", { action: "calibrate-status" })), 700);
 }
 
-// ---- 話して頼む（使える端末だけ。使えなければキーボードのマイクを案内） ----
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+// ---- 話して頼む（使える端末だけ） ----
+// 声の聞き取りは、暗号化した接続（https）か、この PC 自身（127.0.0.1）で開いたときしか使えない。
+// 家や施設の Wi-Fi で http のまま開くスマホでは使えないので、ボタンを出さない（キーボードのマイクで話せる）
+const SR = window.isSecureContext ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
+var PLACEHOLDER = SR ? "こんな遊びにしたい…" : "書くか、キーボードの🎤で話す";
+if (!SR) {
+  $("mic").hidden = true;
+  $("text").placeholder = PLACEHOLDER;
+}
 $("mic").addEventListener("click", () => {
   if (!SR) {
     $("text").focus();
