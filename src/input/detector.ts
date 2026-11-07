@@ -28,6 +28,11 @@ export interface DetectorOptions {
    * 1つのボールが測れない点で2つに割れたり、手と腕が別々に見えたりして、二重に数えるのを防ぐ
    */
   mergeDist: number;
+  /**
+   * 見えている物のこれ以内（m）に新しく現れたものは、次のスキャンでも見えたときだけ当たりにする（0で無効）。
+   * 当たった瞬間に一瞬だけ出る破片を数えないため。離れた所の当たりは遅らせない
+   */
+  confirmNearDist: number;
   /** 無視する場所（センサー座標の長方形、メートル）。家具・カーテン・柱など */
   ignoreRects: { x0: number; y0: number; x1: number; y1: number }[];
 }
@@ -44,6 +49,7 @@ export const DETECTOR_HELP: Record<keyof DetectorOptions, string> = {
   minDistance: "これより近い点は無視（m、0で制限なし）",
   maxDistance: "これより遠い点は無視（m、0で制限なし）。壁の外の部屋の物を拾うときに使う",
   mergeDist: "いま見えている物のこれ以内（m）に同じ瞬間に現れたものは、新しい当たりにしない。1回なのに2回数えるなら上げる。近くで同時に当てたのを1回にしてしまうなら下げる（0で無効）",
+  confirmNearDist: "見えている物のこれ以内（m）に新しく現れたものは、次のスキャンでも見えたときだけ当たりにする。当たりの直後に近くでもう1回数えるなら上げる（0で無効）",
   ignoreRects: "無視する長方形（センサー座標 m の x0,y0,x1,y1）。家具・カーテンなど",
 };
 
@@ -59,6 +65,7 @@ export const DEFAULT_DETECTOR: DetectorOptions = {
   minDistance: 0,
   maxDistance: 0,
   mergeDist: 0.2,
+  confirmNearDist: 0.4,
   ignoreRects: [],
 };
 
@@ -83,6 +90,8 @@ export interface Track {
   points: number;
   /** 別の物の一部とみなした追跡（当たり・離れたを出さず、外にも見せない） */
   silent?: boolean;
+  /** 近くに現れたばかりで、次のスキャンで見えるのを待っている（まだ当たりを出していない） */
+  pending?: boolean;
 }
 
 export interface DetectorEvent {
@@ -169,7 +178,7 @@ export class Detector {
     }
     const blobs = this.findBlobs(scan.ranges, this.background);
     const events = this.updateTracks(blobs, scan.t);
-    return { t: scan.t, tracks: this.tracks.filter((tr) => !tr.silent).map((tr) => ({ ...tr })), events, blobs, learning: false };
+    return { t: scan.t, tracks: this.tracks.filter((tr) => !tr.silent && !tr.pending).map((tr) => ({ ...tr })), events, blobs, learning: false };
   }
 
   private findBlobs(ranges: number[], bg: number[]): Blob[] {
@@ -256,7 +265,9 @@ export class Detector {
         if (d <= trackGate) pairs.push({ ti, bi, d });
       });
     });
-    pairs.sort((a, b) => a.d - b.d);
+    // 当たりを出した物を先に対応づける（待っている破片や一部の物が、本物のまとまりを横取りしないように）
+    const rank = (ti: number) => (this.tracks[ti]!.silent || this.tracks[ti]!.pending ? 1 : 0);
+    pairs.sort((a, b) => rank(a.ti) - rank(b.ti) || a.d - b.d);
     const usedTracks = new Set<number>();
     for (const { ti, bi } of pairs) {
       if (usedTracks.has(ti) || !unmatched.has(bi)) continue;
@@ -274,26 +285,35 @@ export class Detector {
       tr.conf = Math.min(1, tr.conf + 0.25);
       tr.width = b.width;
       tr.points = b.points;
+      if (tr.pending) {
+        tr.pending = false;
+        events.push({ type: "down", id: tr.id, x: tr.x, y: tr.y });
+      }
     }
 
     // 見えなくなった物体
     this.tracks = this.tracks.filter((tr) => {
       if (t - tr.lastSeen > lostMs) {
-        if (!tr.silent) events.push({ type: "up", id: tr.id, x: tr.x, y: tr.y });
+        if (!tr.silent && !tr.pending) events.push({ type: "up", id: tr.id, x: tr.x, y: tr.y });
         return false;
       }
       return true;
     });
 
     // 新しく現れた物体 = 当たった・触れた瞬間
-    const { mergeDist } = this.opts;
+    const { mergeDist, confirmNearDist } = this.opts;
     for (const bi of unmatched) {
       const b = blobs[bi]!;
-      // この瞬間に見えている物（今回のスキャンで見えた追跡）のすぐそばなら、同じ物の一部とみなす
-      const partOf = mergeDist > 0 && this.tracks.some((o) => o.lastSeen === t && Math.hypot(o.x - b.x, o.y - b.y) <= mergeDist);
-      const tr: Track = { id: this.nextId++, x: b.x, y: b.y, vx: 0, vy: 0, firstSeen: t, lastSeen: t, conf: 0.5, width: b.width, points: b.points, ...(partOf ? { silent: true } : {}) };
+      // この瞬間に見えている物（今回のスキャンで見えた、当たりを出した追跡）までの距離
+      let near = Infinity;
+      for (const o of this.tracks) if (o.lastSeen === t && !o.silent && !o.pending) near = Math.min(near, Math.hypot(o.x - b.x, o.y - b.y));
+      // すぐそばなら、同じ物の一部とみなす
+      const partOf = mergeDist > 0 && near <= mergeDist;
+      // 少し離れた近くなら、次のスキャンでも見えるまで待つ
+      const pending = !partOf && confirmNearDist > 0 && near <= confirmNearDist;
+      const tr: Track = { id: this.nextId++, x: b.x, y: b.y, vx: 0, vy: 0, firstSeen: t, lastSeen: t, conf: 0.5, width: b.width, points: b.points, ...(partOf ? { silent: true } : {}), ...(pending ? { pending: true } : {}) };
       this.tracks.push(tr);
-      if (!partOf) events.push({ type: "down", id: tr.id, x: tr.x, y: tr.y });
+      if (!partOf && !pending) events.push({ type: "down", id: tr.id, x: tr.x, y: tr.y });
     }
     return events;
   }
