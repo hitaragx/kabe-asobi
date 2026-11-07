@@ -128,7 +128,7 @@ export default defineGame({
     // はじまり
     ctx.setScore(null);
     drawTint();
-    // まん中の的に当てたら始まる（誰もいないのに勝負が繰り返されないように）
+    // 壁のどこかに当てたら始まる（誰もいないのに勝負が繰り返されないように）
     ctx.waitStart(() => {
       ctx.announce("よーい…", 1200);
       ctx.after(1400, () => {

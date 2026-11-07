@@ -293,31 +293,31 @@ export class Runtime {
         scope.timers.add(t);
       },
       waitStart: (f, opts = {}) => {
-        const R = Math.min(W, H) * 0.17;
+        // 真ん中に案内の札を出す。壁のどこに当てても（タッチでもボールでも）始まる
         const c = new Container();
         c.x = W / 2;
         c.y = H / 2;
-        const ring = new Graphics()
-          .circle(0, 0, R)
-          .fill(palette.white)
-          .stroke({ width: lineWidth(H) * 1.6, color: palette.ink })
-          .circle(0, 0, R * 0.78)
-          .stroke({ width: lineWidth(H), color: brights[0] ?? palette.ink, alpha: 0.9 });
         const label = new Text({
-          text: opts.text ?? "ここに あてて\nスタート！",
-          style: { fontFamily, fontSize: R * 0.24, fontWeight: "900", fill: palette.ink, align: "center", lineHeight: R * 0.34 },
+          text: opts.text ?? "かべの どこでも\nタッチして スタート！",
+          style: { fontFamily, fontSize: Math.min(W, H) * 0.07, fontWeight: "900", fill: palette.ink, align: "center", lineHeight: Math.min(W, H) * 0.1 },
         });
         label.anchor.set(0.5);
-        c.addChild(ring, label);
+        const padX = label.width * 0.12 + u * 3;
+        const padY = label.height * 0.25 + u * 2;
+        const card = new Graphics()
+          .roundRect(-label.width / 2 - padX, -label.height / 2 - padY, label.width + padX * 2, label.height + padY * 2, u * 4)
+          .fill(palette.white)
+          .stroke({ width: lineWidth(H) * 1.6, color: palette.ink });
+        c.addChild(card, label);
         this.gameLayer.addChild(c);
-        const stopWobble = this.motion.wobble(c, 0.06, 1600);
+        const stopWobble = this.motion.wobble(c, 0.04, 1600);
         let done = false;
         const off = this.input.onDown(
           guard("waitStart", (hit: Hit) => {
-            if (done || Math.hypot(hit.x - c.x, hit.y - c.y) > R + 3 * u) return;
+            if (done) return;
             done = true;
             sound.pop();
-            this.fx.burst(c.x, c.y, { colors: brights, count: 24 });
+            this.fx.burst(hit.x, hit.y, { colors: brights, count: 24 });
             cancel();
             f();
           }),
