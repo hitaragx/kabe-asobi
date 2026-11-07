@@ -292,6 +292,44 @@ export class Runtime {
         const t = setTimeout(() => this.current && this.load(this.current.def.id, false), afterMs);
         scope.timers.add(t);
       },
+      waitStart: (f, opts = {}) => {
+        const R = Math.min(W, H) * 0.17;
+        const c = new Container();
+        c.x = W / 2;
+        c.y = H / 2;
+        const ring = new Graphics()
+          .circle(0, 0, R)
+          .fill(palette.white)
+          .stroke({ width: lineWidth(H) * 1.6, color: palette.ink })
+          .circle(0, 0, R * 0.78)
+          .stroke({ width: lineWidth(H), color: brights[0] ?? palette.ink, alpha: 0.9 });
+        const label = new Text({
+          text: opts.text ?? "ここに あてて\nスタート！",
+          style: { fontFamily, fontSize: R * 0.24, fontWeight: "900", fill: palette.ink, align: "center", lineHeight: R * 0.34 },
+        });
+        label.anchor.set(0.5);
+        c.addChild(ring, label);
+        this.gameLayer.addChild(c);
+        const stopWobble = this.motion.wobble(c, 0.06, 1600);
+        let done = false;
+        const off = this.input.onDown(
+          guard("waitStart", (hit: Hit) => {
+            if (done || Math.hypot(hit.x - c.x, hit.y - c.y) > R + 3 * u) return;
+            done = true;
+            sound.pop();
+            this.fx.burst(c.x, c.y, { colors: brights, count: 24 });
+            cancel();
+            f();
+          }),
+        );
+        scope.unsubs.push(off);
+        const cancel = () => {
+          off();
+          stopWobble();
+          if (!c.destroyed) c.destroy({ children: true });
+        };
+        return cancel;
+      },
     };
   }
 

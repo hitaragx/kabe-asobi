@@ -6,7 +6,7 @@ export default defineGame({
   id: "team-battle",
   title: "あか・あお ふうせん たいけつ",
   description:
-    "左が あかチーム、右が あおチーム。自分のチームの側に のぼってくる風船に ボールを当てて わる。時間内に たくさん わった方の かち。終わると また最初から。",
+    "左が あかチーム、右が あおチーム。自分のチームの側に のぼってくる風船に ボールを当てて わる。まん中の まるに 当てると はじまり、時間内に たくさん わった方の かち。終わると、また まるに 当てて はじめる。",
   rule: "チーム対戦",
   ages: "小学生",
   input: "ボール",
@@ -53,7 +53,8 @@ export default defineGame({
       });
       t.anchor.set(0.5, 0);
       t.x = x;
-      t.y = unit * 2;
+      // まん中の上には「のこり ○びょう」が出るので、その下に置く（4:3 など横が狭い画面でも重ならないように）
+      t.y = unit * 13;
       ctx.stage.addChild(t);
       return t;
     };
@@ -102,15 +103,17 @@ export default defineGame({
       }
     });
 
-    // はじまり：よーい、スタート！
+    // はじまり：まん中の的に当てたら、よーい、スタート！（誰もいないときは始まらない）
     ctx.setScore(null);
-    ctx.announce("よーい…", 1200);
-    ctx.after(1400, () => {
-      ctx.announce("スタート！", 900);
-      ctx.sound.whoosh();
-      playing = true;
-      ctx.setScore(`のこり ${left}びょう`);
-      for (const t of teams) for (let i = 0; i < Math.min(3, params.count); i++) ctx.after(i * 400, () => spawn(t));
+    ctx.waitStart(() => {
+      ctx.announce("よーい…", 1200);
+      ctx.after(1400, () => {
+        ctx.announce("スタート！", 900);
+        ctx.sound.whoosh();
+        playing = true;
+        ctx.setScore(`のこり ${left}びょう`);
+        for (const t of teams) for (let i = 0; i < Math.min(3, params.count); i++) ctx.after(i * 400, () => spawn(t));
+      });
     });
     ctx.every(800 / params.speed, () => {
       for (const t of teams) spawn(t);

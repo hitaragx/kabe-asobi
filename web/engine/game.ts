@@ -98,6 +98,12 @@ export interface GameContext<P extends Params = Params> {
   announce(text: string, ms?: number): void;
   /** 遊びが終わった（時間制など）。少し待って最初からやり直す */
   finish(afterMs?: number): void;
+  /**
+   * 画面の真ん中に「ここに あてて スタート」の的を出し、ボールかタッチが当たったら f を呼ぶ。
+   * 時間制・対戦の遊びは、これで始める（誰もいないのに勝負が繰り返されないように）。finish のあとも、また的から始まる。
+   * 的を消す関数を返す
+   */
+  waitStart(f: () => void, opts?: { text?: string }): () => void;
 }
 
 export interface GameInstance {
