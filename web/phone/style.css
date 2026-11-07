@@ -86,7 +86,7 @@ header h1 { font-size:18px; margin:0; }
 .req .tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
 .req .tags button { border:1px solid var(--blue); color:var(--blue); background:#fff; border-radius:999px; padding:4px 10px; font-size:12px; }
 .req.ng .a { color:var(--red); }
-.empty { color:var(--sub); text-align:center; padding:20px 0; font-size:14px; line-height:1.7; }
+.empty { color:var(--sub); text-align:center; white-space:pre-line; padding:20px 0; font-size:14px; line-height:1.7; }
 .calib { text-align:center; padding:8px 0 4px; line-height:1.7; }
 .calib .big { font-size:18px; font-weight:bold; margin:8px 0; }
 .calib .dots { font-size:22px; letter-spacing:6px; }

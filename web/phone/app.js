@@ -349,6 +349,12 @@ function gameRow(g) {
 
 function showGames() {
   const list = el("div");
+  // 遊びの一覧は壁の画面から届く。壁の画面が閉じていると空になるので、理由を出す
+  if (!state.wallOpen || !state.games.length) {
+    list.append(el("div", "empty", "壁の画面が開いていないので、遊びの一覧を出せません。\nMac で壁の画面（Chrome）を開くと、ここに出ます。"));
+    openSheet("遊びをえらぶ", list);
+    return;
+  }
   const mine = state.games.filter((g) => !g.preset);
   const presets = state.games.filter((g) => g.preset);
   list.append(el("div", "group", "作った遊び"));
