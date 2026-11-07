@@ -357,11 +357,11 @@ function showGames() {
   }
   const mine = state.games.filter((g) => !g.preset);
   const presets = state.games.filter((g) => g.preset);
+  list.append(el("div", "group", "はじめからある遊び（直す・消すはできません）"));
+  for (const g of presets) list.append(gameRow(g));
   list.append(el("div", "group", "作った遊び"));
   if (!mine.length) list.append(el("div", "empty", "まだありません。下の欄から Claude に頼むと、ここに増えます"));
   for (const g of mine) list.append(gameRow(g));
-  list.append(el("div", "group", "はじめからある遊び（直す・消すはできません）"));
-  for (const g of presets) list.append(gameRow(g));
   list.append(el("div", "empty", "遊びの名前を押すと、どの頼みごとから作ったか、なぜその遊びにしたかが見られます"));
   openSheet("遊びをえらぶ", list);
 }
