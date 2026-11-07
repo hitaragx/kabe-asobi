@@ -1,5 +1,6 @@
 // センサーの接続確認。つながるか、仕様、1回分の距離の様子を表示する。
 //   npx tsx tools/sensor-check.ts [--host 192.168.0.10]
+import { networkInterfaces } from "node:os";
 import { parseArgs } from "node:util";
 import { SCIP_PORT, ScipClient, parseDistances, parseParams, specFromParams } from "../src/input/scip.ts";
 
@@ -30,8 +31,16 @@ try {
 } catch (e) {
   const msg = e instanceof Error ? e.message : String(e);
   say(`\n不合格：${msg}`);
+  // この PC 自身がセンサーと同じ IP を持っていると、ping は自分に返事をして通ってしまう（家の Wi-Fi が 192.168.0.x のとき）
+  const mine = Object.entries(networkInterfaces()).flatMap(([name, list]) =>
+    (list ?? []).filter((i) => i.family === "IPv4" && i.address === values.host).map(() => name),
+  );
+  if (mine.length) {
+    say(`\n※ この PC 自身（${mine.join("・")}）が ${values.host} を使っています。ping が通っても、センサーではなく自分が返事をしています。`);
+    say("   docs/sensor-setup.md の「Wi-Fi も 192.168.0.x のとき」の手順で、Wi-Fi の番号を変えてください");
+  }
   say("確かめること：");
-  say("  - センサーの電源が入っているか（緑のランプ）、LANケーブルがささっているか");
+  say("  - センサーの電源が入っているか（青いランプが点きっぱなし）、LANケーブルがささっているか");
   say("  - Mac の有線LANの IP が 192.168.0.100、サブネットマスク 255.255.255.0、ルーターが空欄か");
   say(`  - ping -c 3 ${values.host} で返事があるか。なければ、センサーの IP アドレスが変わっている可能性があります（docs/sensor-setup.md）`);
   process.exitCode = 1;
