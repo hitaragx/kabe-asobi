@@ -128,12 +128,15 @@ export default defineGame({
     // はじまり
     ctx.setScore(null);
     drawTint();
-    ctx.announce("よーい…", 1200);
-    ctx.after(1400, () => {
-      ctx.announce("スタート！", 900);
-      ctx.sound.whoosh();
-      playing = true;
-      for (const t of teams) for (let i = 0; i < params.count; i++) ctx.after(i * 400, () => spawn(t));
+    // まん中の的に当てたら始まる（誰もいないのに勝負が繰り返されないように）
+    ctx.waitStart(() => {
+      ctx.announce("よーい…", 1200);
+      ctx.after(1400, () => {
+        ctx.announce("スタート！", 900);
+        ctx.sound.whoosh();
+        playing = true;
+        for (const t of teams) for (let i = 0; i < params.count; i++) ctx.after(i * 400, () => spawn(t));
+      });
     });
     ctx.every(700 / params.speed, () => { for (const t of teams) spawn(t); });
 
