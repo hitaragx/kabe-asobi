@@ -99,3 +99,6 @@ web/live/*.ts
 !web/live/sakana.ts
 !web/live/team-battle.ts
 !web/live/tsukimi-usagi.ts
+
+# ===== 提出物ではないもの（個人のメモとして、リポジトリの外に置く） =====
+docs/demo-script.md
