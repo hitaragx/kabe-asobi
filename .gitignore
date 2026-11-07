@@ -68,6 +68,7 @@ recordings/*.jsonl
 test-results/
 
 .history/
+.trash/
 config/params.json
 config/calibration.json
 config/detector.json

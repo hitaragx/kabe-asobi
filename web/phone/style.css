@@ -61,6 +61,13 @@ header h1 { font-size:18px; margin:0; }
 .game .go { flex:none; border:none; background:var(--blue); color:#fff; border-radius:999px; padding:8px 14px; font-size:13px; font-weight:bold; margin-left:8px; }
 .game .now { flex:none; color:var(--blue); font-weight:bold; font-size:13px; margin-left:8px; }
 .game > div { flex:1; min-width:0; }
+.game > .btns { flex:none; display:flex; align-items:center; gap:6px; margin-left:8px; }
+.game .btns .go, .game .btns .now { margin-left:0; }
+.game .edit, .game .del { border:1px solid #d1d5db; background:#fff; border-radius:999px; padding:7px 10px; font-size:13px; font-weight:bold; }
+.game .del { color:var(--red); border-color:#fecaca; }
+.group { font-size:13px; font-weight:bold; color:var(--sub); margin:12px 2px 6px; }
+.group:first-child { margin-top:0; }
+.detail .actions-row button.danger { background:#fff; color:var(--red); border:1px solid #fecaca; flex:none; padding:12px 18px; }
 .detail h3 { margin:0 0 4px; font-size:18px; }
 .detail .sub { color:var(--sub); font-size:13px; margin-bottom:12px; }
 .detail .actions-row { display:flex; gap:8px; margin:4px 0 16px; }

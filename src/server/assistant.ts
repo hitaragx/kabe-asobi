@@ -7,6 +7,7 @@
 import { createSdkMcpServer, query, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { HUB_PORT } from "../shared/protocol.ts";
+import { PRESET_GAMES } from "../shared/presets.ts";
 
 /** 作り始める前に職員に見せる、遊びの案 */
 export type Plan = {
@@ -56,6 +57,7 @@ const STAFF_MODE = `
 - 音楽・効果音の大きさ、曲の雰囲気は set_audio で直す
 - 終わったら、何を変えたかを一言で伝え、「どうですか？」と聞く
 - 分からないことは推測で大きく作り変えず、1問だけ聞く
+- はじめから入っている遊び（${PRESET_GAMES.join("、")}）は直せない。職員がそれを直したいと言ったら、元の遊びは残したまま、別の ID（例：balloons-2）でコピーを作って直し、新しい遊びとして出す（そのとき「元の遊びはそのまま残して、新しい遊びとして作りました」と一言添える）。値の調整（set_params）はそのままできる
 - 子ども向けでない頼みごと（性的・残酷・武器で傷つける・本気で怖がらせる・差別やからかい・ギャンブル・既存キャラクター）は作らない。既存キャラクターの代わりは、名前・色・特徴も似せない別の生きものにする。責めずに一言で理由を伝え、子ども向けに直した代わりの案を propose_plan で出す
 `.trim();
 
@@ -186,7 +188,17 @@ export class ClaudeAssistant implements Assistant {
           },
           // 職員モードではシェルとWebは使わない（検証は壁サーバーの道具で行う）
           // 鍵（.env）は読ませない。設定（.claude、.mcp.json、CLAUDE.md）は上の allowedTools に入っていないので書けない
-          disallowedTools: ["Bash", "WebFetch", "WebSearch", "Read(./.env)", "Read(./.env.*)", "Edit(./.env)", "Write(./.env)"],
+          // はじめから入っている遊び（見本）は書き換えさせない。直したいときは別の名前で新しく作る
+          disallowedTools: [
+            "Bash",
+            "WebFetch",
+            "WebSearch",
+            "Read(./.env)",
+            "Read(./.env.*)",
+            "Edit(./.env)",
+            "Write(./.env)",
+            ...PRESET_GAMES.flatMap((id) => [`Edit(web/games/${id}.ts)`, `Write(web/games/${id}.ts)`]),
+          ],
           systemPrompt: { type: "preset", preset: "claude_code", append: STAFF_MODE },
           model: this.opts.model ?? "claude-opus-5-5",
           maxBudgetUsd: this.opts.maxBudgetUsd ?? 3,
@@ -195,7 +207,8 @@ export class ClaudeAssistant implements Assistant {
           abortController,
           ...(this.sessionId ? { resume: this.sessionId } : {}),
           // キーはこのプロセスにだけ渡す（シェルに置くと Remote Control が動かなくなるため）
-          env: { ...(process.env as Record<string, string>), ANTHROPIC_API_KEY: this.apiKey },
+          // KABE_STAFF_MODE：壁サーバーが、はじめから入っている遊びの publish・rollback を断る
+          env: { ...(process.env as Record<string, string>), ANTHROPIC_API_KEY: this.apiKey, KABE_STAFF_MODE: "1" },
         },
       });
       for await (const m of q) {

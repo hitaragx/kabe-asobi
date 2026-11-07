@@ -15,6 +15,7 @@ import { z } from "zod";
 import { HUB_PORT, MUSIC_STYLES, type MusicStyle, type WallAction } from "../shared/protocol.ts";
 import { analyze, listRecordings, loadRecording } from "../input/analyze.ts";
 import { checkId, listGameFiles, noteVersion, publishFile, rollbackFile } from "../server/games.ts";
+import { isPreset } from "../shared/presets.ts";
 import { tool } from "../shared/run.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -88,6 +89,21 @@ const server = new McpServer({ name: "kabe-wall", version: "0.1.0" });
  * 値を変えたあと、壁にその遊びがまだ映っているか確かめる。
  * 値のせいで遊びが壊れると、壁は別の遊びに切り替わる。それを「成功」と返さないため
  */
+/** 職員モード（スマホから）では、はじめから入っている遊びは直せない。直したいときは別の ID で新しく作る */
+const STAFF = process.env.KABE_STAFF_MODE === "1";
+function presetLocked(id: string) {
+  if (!STAFF || !isPreset(id)) return null;
+  return {
+    ...result(
+      text({
+        published: false,
+        reason: "はじめから入っている遊びは、職員の画面からは直せません。直したいときは、別の ID（例：" + id + "-2）で下書きを作り、新しい遊びとして publish_game してください。値の調整（set_params）はできます",
+      }),
+    ),
+    isError: true,
+  };
+}
+
 function checkStillShown(stats: unknown, id: string, okBody: Record<string, unknown>) {
   const st = stats as { game?: string | null; errors?: { game: string; where: string; message: string }[] } | undefined;
   if (!st || st.game === undefined || st.game === id) return result(text(okBody));
@@ -162,6 +178,8 @@ server.registerTool(
   },
   async ({ id, reason, seconds }) => {
     checkId(id);
+    const locked = presetLocked(id);
+    if (locked) return locked;
     const r = await runVerify(id, seconds ?? 6);
     if (!r.ok) return { ...result(text({ published: false, reason: "検証に通りませんでした。壁は変えていません", verify: r })), isError: true };
     const { previousSaved, changed, isNew } = publishFile(id);
@@ -181,6 +199,8 @@ server.registerTool(
     inputSchema: { id: z.string() },
   },
   async ({ id }) => {
+    const locked = presetLocked(id);
+    if (locked) return locked;
     try {
       const r = rollbackFile(id);
       noteVersion(id, { kind: "rollback", reason: "前の版に戻しました" });

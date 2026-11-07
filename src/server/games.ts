@@ -3,13 +3,16 @@
 // - web/live/<id>.ts  … 壁に出してよいもの。検証に通った下書きだけがここにコピーされる
 // - .history/<id>/    … 壁に出していた前の版。「さっきのに戻して」で戻す
 // - config/games-meta.json … いつ作ったか・どの頼みごとから・なぜこの遊びにしたか（施設のデータなのでリポジトリに入れない）
+// - .trash/<id>-<日時>/  … 職員が消した遊び（下書き・壁の版・前の版をまとめて移す。間違えて消しても戻せる）
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { isPreset } from "../shared/presets.ts";
 
 export const DRAFT_DIR = "web/games";
 export const LIVE_DIR = "web/live";
 export const HISTORY_DIR = ".history";
+export const TRASH_DIR = ".trash";
 
 export function checkId(id: string): void {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) throw new Error(`遊びのIDは英小文字・数字・ハイフンで書いてください: ${id}`);
@@ -136,4 +139,27 @@ export function rollbackFile(id: string): { restored: string } {
   copyFileSync(src, join(DRAFT_DIR, `${id}.ts`));
   unlinkSync(src);
   return { restored: last };
+}
+
+/**
+ * 職員が作った遊びを消す。はじめから入っている遊びは消せない。
+ * ファイルは消さずに .trash/<id>-<日時>/ へ移す（下書き・壁の版・前の版）。記録（games-meta）からも外す
+ */
+export function deleteGame(id: string): { movedTo: string } {
+  checkId(id);
+  if (isPreset(id)) throw new Error("はじめから入っている遊びは消せません");
+  const files = [join(DRAFT_DIR, `${id}.ts`), join(LIVE_DIR, `${id}.ts`)].filter((f) => existsSync(f));
+  const hist = join(HISTORY_DIR, id);
+  if (!files.length && !existsSync(hist)) throw new Error(`その遊びはありません: ${id}`);
+  const to = join(TRASH_DIR, `${id}-${new Date().toISOString().replace(/[:.]/g, "-")}`);
+  mkdirSync(to, { recursive: true });
+  for (const f of files) renameSync(f, join(to, f.startsWith(DRAFT_DIR) ? "draft.ts" : "live.ts"));
+  if (existsSync(hist)) renameSync(hist, join(to, "history"));
+  const m = readMeta();
+  if (m[id]) {
+    writeFileSync(join(to, "meta.json"), `${JSON.stringify(m[id], null, 2)}\n`);
+    delete m[id];
+    writeMeta(m);
+  }
+  return { movedTo: to };
 }

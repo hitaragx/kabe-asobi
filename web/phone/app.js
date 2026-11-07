@@ -317,29 +317,75 @@ async function showOnWall(id) {
   setTimeout(refreshSnapshot, 300);
 }
 function madeText(g) {
-  if (!g.createdAt) return "はじめから入っている遊び";
+  if (g.preset) return "はじめから入っている遊び";
+  if (!g.createdAt) return "作った遊び";
   const c = `${day(g.createdAt)} に作った`;
   return g.updatedAt && day(g.updatedAt) !== day(g.createdAt) ? `${c}（${day(g.updatedAt)} に直した）` : c;
 }
 
+function gameRow(g) {
+  const row = el("div", `game${g.id === state.game ? " current" : ""}`);
+  const left = el("div");
+  left.append(el("b", "", g.title), el("small", "", `${g.ages}・${g.rule}`), el("span", "when", madeText(g)));
+  left.addEventListener("click", () => showGame(g.id));
+  row.append(left);
+  const btns = el("div", "btns");
+  if (g.id === state.game) btns.append(el("span", "now", "いま"));
+  else {
+    const go = el("button", "go", "出す");
+    go.addEventListener("click", () => showOnWall(g.id));
+    btns.append(go);
+  }
+  if (!g.preset) {
+    const edit = el("button", "edit", "直す");
+    edit.addEventListener("click", () => editGame(g));
+    const del = el("button", "del", "消す");
+    del.addEventListener("click", () => deleteGame(g, showGames));
+    btns.append(edit, del);
+  }
+  row.append(btns);
+  return row;
+}
+
 function showGames() {
   const list = el("div");
-  for (const g of state.games) {
-    const row = el("div", `game${g.id === state.game ? " current" : ""}`);
-    const left = el("div");
-    left.append(el("b", "", g.title), el("small", "", `${g.ages}・${g.rule}`), el("span", "when", madeText(g)));
-    left.addEventListener("click", () => showGame(g.id));
-    row.append(left);
-    if (g.id === state.game) row.append(el("span", "now", "いま"));
-    else {
-      const go = el("button", "go", "出す");
-      go.addEventListener("click", () => showOnWall(g.id));
-      row.append(go);
-    }
-    list.append(row);
-  }
+  const mine = state.games.filter((g) => !g.preset);
+  const presets = state.games.filter((g) => g.preset);
+  list.append(el("div", "group", "作った遊び"));
+  if (!mine.length) list.append(el("div", "empty", "まだありません。下の欄から Claude に頼むと、ここに増えます"));
+  for (const g of mine) list.append(gameRow(g));
+  list.append(el("div", "group", "はじめからある遊び（直す・消すはできません）"));
+  for (const g of presets) list.append(gameRow(g));
   list.append(el("div", "empty", "遊びの名前を押すと、どの頼みごとから作ったか、なぜその遊びにしたかが見られます"));
   openSheet("遊びをえらぶ", list);
+}
+
+/** 直す：その遊びを壁に出して、Claude への頼みごとの欄に書き出しを入れる */
+async function editGame(g) {
+  if (g.id !== state.game) await showOnWall(g.id);
+  else closeSheet();
+  const t = $("text");
+  t.value = `「${g.title}」を直して：`;
+  t.placeholder = "どこを変えたいですか？";
+  t.focus();
+  t.setSelectionRange(t.value.length, t.value.length);
+}
+
+/** 消す：確かめてから消す（はじめからある遊びは消せない） */
+async function deleteGame(g, back) {
+  if (g.preset) return;
+  if (!confirm(`「${g.title}」を消しますか？\n消した遊びは一覧から消えます。`)) return;
+  const r = await api("/api/action", { action: "delete", id: g.id });
+  if (!r.ok) {
+    alert(r.error || "消せませんでした");
+    return;
+  }
+  await refreshState();
+  // 壁の画面が読み込み直すのを待ってから、一覧を出し直す
+  setTimeout(async () => {
+    await refreshState();
+    back();
+  }, 1200);
 }
 
 function showGame(id, back = showGames) {
@@ -357,7 +403,18 @@ function showGame(id, back = showGames) {
     row.append(go);
   }
   box.append(row);
-  if (!g.versions.length) box.append(el("div", "empty", "はじめから入っている遊びなので、頼みごとの記録はありません"));
+  if (!g.preset) {
+    const row2 = el("div", "actions-row");
+    const edit = el("button", "", "直す（Claude に頼む）");
+    edit.addEventListener("click", () => editGame(g));
+    const del = el("button", "danger", "消す");
+    del.addEventListener("click", () => deleteGame(g, back));
+    row2.append(edit, del);
+    box.append(row2);
+  } else {
+    box.append(el("div", "note", "はじめからある遊びは、直す・消すはできません。変えたいときは Claude に頼むと、元の遊びは残したまま、新しい遊びとして作ります。"));
+  }
+  if (!g.versions.length) box.append(el("div", "empty", g.preset ? "はじめから入っている遊びなので、頼みごとの記録はありません" : "頼みごとの記録はありません"));
   for (const v of g.versions) {
     const ver = el("div", `ver ${v.kind}`);
     ver.append(el("div", "t", `${when(v.at)}　${KIND[v.kind] ?? ""}`));

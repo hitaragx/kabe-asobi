@@ -14,7 +14,8 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { HUB_PORT, MUSIC_STYLES } from "../shared/protocol.ts";
 import { type Assistant, type AssistantEvent, ClaudeAssistant, MockAssistant, type Plan } from "./assistant.ts";
-import { type GameVersion, linkRequest, readMeta } from "./games.ts";
+import { type GameVersion, deleteGame, linkRequest, readMeta } from "./games.ts";
+import { isPreset } from "../shared/presets.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 process.chdir(ROOT);
@@ -105,7 +106,7 @@ function withMeta(games: { id: string; title: string; ages: string; rule: string
   return games
     .map(({ id, title, ages, rule, music }) => {
       const m = meta[id];
-      return { id, title, ages, rule, music, createdAt: m?.createdAt ?? null, updatedAt: m?.updatedAt ?? null, versions: m ? [...m.versions].reverse() : [] };
+      return { id, title, ages, rule, music, preset: isPreset(id), createdAt: m?.createdAt ?? null, updatedAt: m?.updatedAt ?? null, versions: m ? [...m.versions].reverse() : [] };
     })
     .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0) || a.title.localeCompare(b.title, "ja"));
 }
@@ -209,6 +210,21 @@ const server = createServer(async (req, res) => {
       if (a.action === "audio") {
         const { music, sfx, style, id } = a as { music?: number; sfx?: number; style?: string | null; id?: string };
         return json(res, 200, await hub("/api/wall", { action: "audio", music, sfx, styles: id && style !== undefined ? { [id]: style } : undefined }));
+      }
+      if (a.action === "delete" && a.id) {
+        // 職員が作った遊びだけ消せる（ファイルは .trash に移すので、間違えても戻せる）
+        if (isPreset(a.id)) return json(res, 200, { ok: false, error: "はじめから入っている遊びは消せません" });
+        if (busy) return json(res, 200, { ok: false, error: "いま Claude が作業中です。終わってから消してください" });
+        // 壁に出ている遊びなら、先に別の遊びに切り替える
+        const stats = await hub("/api/wall", { action: "stats" });
+        if (stats.ok && stats.data.game === a.id) await hub("/api/wall", { action: "load", id: "balloons" });
+        try {
+          const r = deleteGame(a.id);
+          console.log(`遊びを消しました：${a.id}（${r.movedTo.replaceAll("\\", "/")} に移しました）`);
+          return json(res, 200, { ok: true });
+        } catch (e) {
+          return json(res, 200, { ok: false, error: e instanceof Error ? e.message : String(e) });
+        }
       }
       if (a.action === "calibrate") return json(res, 200, await hub("/api/calibration/start", {}));
       if (a.action === "calibrate-status") return json(res, 200, await hub("/api/calibration"));
