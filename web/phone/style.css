@@ -57,7 +57,10 @@ header h1 { font-size:18px; margin:0; }
 .game { display:flex; justify-content:space-between; align-items:center; width:100%; text-align:left; border:1px solid #e5e7eb; background:#fff; border-radius:14px; padding:12px 14px; margin-bottom:8px; }
 .game.current { border-color:var(--blue); background:#eef7ff; }
 .game small { color:var(--sub); display:block; margin-top:2px; }
-.game .when { color:#9ca3af; font-size:12px; display:block; margin-top:2px; }
+.game .when { color:#9ca3af; font-size:12px; margin-top:2px; }
+.game .more { color:var(--blue); font-size:12px; font-weight:bold; white-space:nowrap; }
+.req .why { font-size:14px; line-height:1.6; background:#f5f7fb; border-radius:12px; padding:8px 10px; margin-top:6px; }
+.req .why b { display:block; font-size:12px; color:var(--sub); }
 .game .go { flex:none; border:none; background:var(--blue); color:#fff; border-radius:999px; padding:8px 14px; font-size:13px; font-weight:bold; margin-left:8px; }
 .game .now { flex:none; color:var(--blue); font-weight:bold; font-size:13px; margin-left:8px; }
 .game > div { flex:1; min-width:0; }

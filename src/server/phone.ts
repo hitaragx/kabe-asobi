@@ -64,6 +64,8 @@ type RequestRecord = {
   assistant: "claude" | "mock";
   /** この頼みごとで作った・直した遊び */
   games: { id: string; kind: GameVersion["kind"] }[];
+  /** 頼みごとが終わったとき壁に出ていた遊び（値の調整など、版が変わらない頼みごとも遊びごとに見られるように） */
+  shown?: string | null;
 };
 const requestsFile = join(ROOT, "logs", "requests.jsonl");
 const requests: RequestRecord[] = existsSync(requestsFile)
@@ -312,7 +314,9 @@ const server = createServer(async (req, res) => {
       res.end();
       // 案を見せただけのときは、きろくに残さない（「これで作って」を押したときに、元の頼みごとで残す）
       if (planned && touched.length === 0) return;
+      const after = await hub("/api/wall", { action: "stats" });
       const rec: RequestRecord = {
+        shown: after.ok ? ((after.data as { game?: string | null }).game ?? null) : null,
         at: run.startedAt,
         request,
         reply: reply.error ? `うまくいきませんでした（${reply.error}）` : reply.text,

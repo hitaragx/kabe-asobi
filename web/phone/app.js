@@ -326,7 +326,7 @@ function madeText(g) {
 function gameRow(g) {
   const row = el("div", `game${g.id === state.game ? " current" : ""}`);
   const left = el("div");
-  left.append(el("b", "", g.title), el("small", "", `${g.ages}・${g.rule}`), el("span", "when", madeText(g)));
+  left.append(el("b", "", g.title), el("small", "", `${g.ages}・${g.rule}`), el("span", "when", `${madeText(g)}　`), el("span", "more", "頼みごとを見る ›"));
   left.addEventListener("click", () => showGame(g.id));
   row.append(left);
   const btns = el("div", "btns");
@@ -420,19 +420,62 @@ function showGame(id, back = showGames) {
   } else {
     box.append(el("div", "note", "はじめからある遊びは、直す・消すはできません。変えたいときは Claude に頼むと、元の遊びは残したまま、新しい遊びとして作ります。"));
   }
-  if (!g.versions.length) box.append(el("div", "empty", g.preset ? "はじめから入っている遊びなので、頼みごとの記録はありません" : "頼みごとの記録はありません"));
+  box.append(el("div", "group", "この遊びへの頼みごと"));
+  const listBox = el("div");
+  box.append(listBox);
+  listBox.append(el("div", "empty", "読み込んでいます…"));
+  openSheet("遊びのくわしいこと", box);
+  void fillGameRequests(g, listBox);
+}
+
+/** その遊びへの頼みごと（作った・直した・値の調整など）を、新しい順に出す。Claude の返事と、そうした理由も */
+async function fillGameRequests(g, listBox) {
+  let reqs = [];
+  try {
+    reqs = await api("/api/requests");
+  } catch {}
+  const mine = reqs.filter((r) => r.games.some((x) => x.id === g.id) || r.shown === g.id);
+  listBox.textContent = "";
+  const used = new Set();
+  const cards = [];
+  for (const r of mine) {
+    const kinds = r.games.filter((x) => x.id === g.id).map((x) => KIND[x.kind]).filter(Boolean);
+    // この頼みごとの間に出た版の「理由」を添える
+    const end = r.at + ((r.seconds ?? 0) + 10) * 1000;
+    const vers = g.versions.filter((v) => v.at >= r.at && v.at <= end);
+    vers.forEach((v) => used.add(v));
+    const why = vers.find((v) => v.reason && v.kind !== "rollback")?.reason;
+    cards.push({ at: r.at, node: requestCard(r, kinds.length ? kinds.join("・") : "調整", why) });
+  }
+  // 頼みごとの記録がない版（はじめの準備で出したものなど）
   for (const v of g.versions) {
+    if (used.has(v)) continue;
     const ver = el("div", `ver ${v.kind}`);
     ver.append(el("div", "t", `${when(v.at)}　${KIND[v.kind] ?? ""}`));
     ver.append(el("div", "q", v.request ? `「${v.request}」` : "（頼みごとの記録なし）"));
     if (v.reason && v.kind !== "rollback") {
-      const why = el("div", "why");
-      why.append(el("b", "", "Claude がこうした理由"), document.createTextNode(v.reason));
-      ver.append(why);
+      const w = el("div", "why");
+      w.append(el("b", "", "Claude がこうした理由"), document.createTextNode(v.reason));
+      ver.append(w);
     }
-    box.append(ver);
+    cards.push({ at: v.at, node: ver });
   }
-  openSheet("遊びのくわしいこと", box);
+  cards.sort((a, b) => b.at - a.at);
+  if (!cards.length) listBox.append(el("div", "empty", g.preset ? "まだ頼みごとはありません。はじめから入っている遊びです" : "頼みごとの記録はありません"));
+  for (const c of cards) listBox.append(c.node);
+}
+
+function requestCard(r, kindText, why) {
+  const card = el("div", `req${r.ok ? "" : " ng"}`);
+  const t = el("div", "t");
+  t.append(el("span", "", `${when(r.at)}　${kindText}`), el("span", "", [r.seconds ? `${Math.round(r.seconds)}秒` : "", r.costUsd ? `$${r.costUsd.toFixed(2)}` : ""].filter(Boolean).join("・")));
+  card.append(t, el("div", "q", `「${r.request}」`), el("div", "a", r.reply));
+  if (why) {
+    const w = el("div", "why");
+    w.append(el("b", "", "Claude がこうした理由"), document.createTextNode(why));
+    card.append(w);
+  }
+  return card;
 }
 
 async function showLog() {
