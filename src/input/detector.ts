@@ -23,6 +23,11 @@ export interface DetectorOptions {
   /** この距離より近い・遠い点は無視する（メートル。0 なら制限なし） */
   minDistance: number;
   maxDistance: number;
+  /**
+   * 同じ瞬間に、いま見えている物のこれ以内（m）に現れたまとまりは、新しい当たりとして数えない（0で数える）。
+   * 1つのボールが測れない点で2つに割れたり、手と腕が別々に見えたりして、二重に数えるのを防ぐ
+   */
+  mergeDist: number;
   /** 無視する場所（センサー座標の長方形、メートル）。家具・カーテン・柱など */
   ignoreRects: { x0: number; y0: number; x1: number; y1: number }[];
 }
@@ -38,6 +43,7 @@ export const DETECTOR_HELP: Record<keyof DetectorOptions, string> = {
   lostMs: "見えなくなってから離れたとみなすまで（ms）。1回の当たりが2回に数えられるなら上げる",
   minDistance: "これより近い点は無視（m、0で制限なし）",
   maxDistance: "これより遠い点は無視（m、0で制限なし）。壁の外の部屋の物を拾うときに使う",
+  mergeDist: "いま見えている物のこれ以内（m）に同じ瞬間に現れたものは、新しい当たりにしない。1回なのに2回数えるなら上げる。近くで同時に当てたのを1回にしてしまうなら下げる（0で無効）",
   ignoreRects: "無視する長方形（センサー座標 m の x0,y0,x1,y1）。家具・カーテンなど",
 };
 
@@ -52,6 +58,7 @@ export const DEFAULT_DETECTOR: DetectorOptions = {
   lostMs: 60,
   minDistance: 0,
   maxDistance: 0,
+  mergeDist: 0.2,
   ignoreRects: [],
 };
 
@@ -74,6 +81,8 @@ export interface Track {
   /** 直近のまとまりの幅（m）と点の数 */
   width: number;
   points: number;
+  /** 別の物の一部とみなした追跡（当たり・離れたを出さず、外にも見せない） */
+  silent?: boolean;
 }
 
 export interface DetectorEvent {
@@ -160,7 +169,7 @@ export class Detector {
     }
     const blobs = this.findBlobs(scan.ranges, this.background);
     const events = this.updateTracks(blobs, scan.t);
-    return { t: scan.t, tracks: this.tracks.map((tr) => ({ ...tr })), events, blobs, learning: false };
+    return { t: scan.t, tracks: this.tracks.filter((tr) => !tr.silent).map((tr) => ({ ...tr })), events, blobs, learning: false };
   }
 
   private findBlobs(ranges: number[], bg: number[]): Blob[] {
@@ -270,18 +279,21 @@ export class Detector {
     // 見えなくなった物体
     this.tracks = this.tracks.filter((tr) => {
       if (t - tr.lastSeen > lostMs) {
-        events.push({ type: "up", id: tr.id, x: tr.x, y: tr.y });
+        if (!tr.silent) events.push({ type: "up", id: tr.id, x: tr.x, y: tr.y });
         return false;
       }
       return true;
     });
 
     // 新しく現れた物体 = 当たった・触れた瞬間
+    const { mergeDist } = this.opts;
     for (const bi of unmatched) {
       const b = blobs[bi]!;
-      const tr: Track = { id: this.nextId++, x: b.x, y: b.y, vx: 0, vy: 0, firstSeen: t, lastSeen: t, conf: 0.5, width: b.width, points: b.points };
+      // この瞬間に見えている物（今回のスキャンで見えた追跡）のすぐそばなら、同じ物の一部とみなす
+      const partOf = mergeDist > 0 && this.tracks.some((o) => o.lastSeen === t && Math.hypot(o.x - b.x, o.y - b.y) <= mergeDist);
+      const tr: Track = { id: this.nextId++, x: b.x, y: b.y, vx: 0, vy: 0, firstSeen: t, lastSeen: t, conf: 0.5, width: b.width, points: b.points, ...(partOf ? { silent: true } : {}) };
       this.tracks.push(tr);
-      events.push({ type: "down", id: tr.id, x: tr.x, y: tr.y });
+      if (!partOf) events.push({ type: "down", id: tr.id, x: tr.x, y: tr.y });
     }
     return events;
   }
