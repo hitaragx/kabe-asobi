@@ -8,7 +8,7 @@
 遊びを作る・直す・壁に合わせる作業は Claude Code が受け持ち、職員はエンジニアでなくても使えます。
 
 > Built with Claude: Japan 2026 の応募作品です。ハッカソン期間中（2026-11-03〜11-08）に、ゼロから Claude Code と作りました。
-> デモ動画：（提出時に追加します）
+> デモ動画（3分）：https://youtu.be/JNvhsAywzQQ
 
 <p align="center"><img src="docs/images/manual/wall-new-game.jpg" width="720" alt="壁に出た新しい遊び（おばけに光のボールを当てる）"></p>
 
