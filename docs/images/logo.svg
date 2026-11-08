@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" width="1200" height="400">
+  <!-- かべあそびのロゴ：文字が壁のタイル。ひとつにボールが当たって、はねている（Claude Code がコードで描いたもの） -->
+  <style>
+    .t { font-family: "Hiragino Maru Gothic ProN", "Rounded Mplus 1c", "Arial Rounded MT Bold", sans-serif; font-weight: 700; font-size: 128px; fill: #ffffff;
+         paint-order: stroke; stroke: #1a1a2e; stroke-width: 14px; stroke-linejoin: round; }
+  </style>
+  <rect x="0" y="0" width="1200" height="400" rx="48" fill="#fff8ec"/>
+  <g stroke="#1a1a2e" stroke-width="10" stroke-linejoin="round">
+    <rect x="70"  y="110" width="190" height="190" rx="34" fill="#ff5a5f" transform="rotate(-4 165 205)"/>
+    <rect x="290" y="110" width="190" height="190" rx="34" fill="#ffd23f" transform="rotate(3 385 205)"/>
+    <rect x="510" y="110" width="190" height="190" rx="34" fill="#3fa7ff" transform="rotate(-2 605 205)"/>
+    <rect x="730" y="110" width="190" height="190" rx="34" fill="#3ddc97" transform="rotate(4 825 205)"/>
+    <rect x="950" y="110" width="190" height="190" rx="34" fill="#9b5de5" transform="rotate(-3 1045 205)"/>
+  </g>
+  <g class="t" text-anchor="middle">
+    <text x="165"  y="250" transform="rotate(-4 165 205)">か</text>
+    <text x="385"  y="250" transform="rotate(3 385 205)">べ</text>
+    <text x="605"  y="250" transform="rotate(-2 605 205)">あ</text>
+    <text x="825"  y="250" transform="rotate(4 825 205)">そ</text>
+    <text x="1045" y="250" transform="rotate(-3 1045 205)">び</text>
+  </g>
+  <!-- ボールの軌跡と当たり -->
+  <path d="M760 60 Q860 10 930 70" fill="none" stroke="#1a1a2e" stroke-width="6" stroke-dasharray="4 16" stroke-linecap="round"/>
+  <g stroke="#ff9f1c" stroke-width="10" stroke-linecap="round">
+    <line x1="1000" y1="96" x2="990" y2="70"/><line x1="1030" y1="90" x2="1040" y2="62"/><line x1="970" y1="110" x2="944" y2="100"/>
+  </g>
+  <circle cx="1005" cy="118" r="34" fill="#ff7eb6" stroke="#1a1a2e" stroke-width="9"/>
+  <circle cx="994" cy="112" r="5" fill="#1a1a2e"/><circle cx="1016" cy="112" r="5" fill="#1a1a2e"/>
+  <path d="M994 126 Q1005 136 1016 126" fill="none" stroke="#1a1a2e" stroke-width="5" stroke-linecap="round"/>
+</svg>
