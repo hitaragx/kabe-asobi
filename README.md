@@ -132,7 +132,7 @@ Claude が画面の中だけで完結せず、センサーの生のデータを�
 
 ```bash
 npm install
-npx playwright install chromium   # 自動検証を使う場合
+npx playwright install chromium   # 遊びを壁に出す前の自動検証に使う（なければ PC の Google Chrome で代用します）
 git config core.hooksPath .githooks
 npm run dev
 ```

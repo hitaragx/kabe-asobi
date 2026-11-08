@@ -65,6 +65,27 @@ interface Stats {
   objects: number;
 }
 
+/**
+ * 検証用のブラウザを開く。Playwright の Chromium（`npx playwright install chromium`）があればそれを、
+ * なければ PC に入っている Google Chrome を使う（壁の画面を映すのに Chrome は必ずあるので、入れ忘れても止まらない）
+ */
+async function launchBrowser() {
+  const args = ["--autoplay-policy=no-user-gesture-required"];
+  try {
+    return await chromium.launch({ args });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!/Executable doesn't exist|playwright install/i.test(msg)) throw e;
+    try {
+      return await chromium.launch({ channel: "chrome", args });
+    } catch {
+      throw new Error(
+        "検証に使うブラウザが見つかりません。Google Chrome を入れるか、`npx playwright install chromium` を一度実行してください",
+      );
+    }
+  }
+}
+
 async function main(): Promise<void> {
   // すでに動いていればそれを使う
   if (!(await up(`http://127.0.0.1:${HUB_PORT}`))) {
@@ -78,7 +99,7 @@ async function main(): Promise<void> {
   }
 
   mkdirSync("test-results", { recursive: true });
-  const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
+  const browser = await launchBrowser();
   const viewport = { width: Number(opts.width), height: Number(opts.height) };
   const page = await browser.newPage({ viewport });
   const consoleErrors: string[] = [];
