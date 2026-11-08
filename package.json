@@ -5,7 +5,8 @@
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
-    "dev": "concurrently -k -n hub,wall,phone \"tsx src/server/hub.ts --source sim\" \"vite\" \"tsx src/server/phone.ts\"",
+    "dev": "concurrently -k -n hub,wall,phone \"tsx src/server/hub.ts --source sim --no-balls\" \"vite\" \"tsx src/server/phone.ts\"",
+    "dev:auto": "concurrently -k -n hub,wall,phone \"tsx src/server/hub.ts --source sim\" \"vite\" \"tsx src/server/phone.ts\"",
     "hub": "tsx src/server/hub.ts",
     "web": "vite",
     "test": "vitest run",

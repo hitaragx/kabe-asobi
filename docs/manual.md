@@ -44,7 +44,8 @@ PC のターミナル（Windows では PowerShell）で、次のどちらかを�
 
 ```bash
 npm run dev:lidar   # センサーをつないで使うとき
-npm run dev         # センサーなしで試すとき（模擬の入力）
+npm run dev         # センサーなしで試すとき（模擬の入力。画面をクリックやタップすると当たりになる）
+npm run dev:auto    # 模擬の子どもが自動でボールを投げる様子を見たいとき
 ```
 
 起動すると、次の2つの URL が表示されます。
