@@ -22,6 +22,14 @@
 | 「人が近くに立つと反応する」を Claude が自分で調整 | 余計な反応 131回 → 5回（25秒） |
 | 1回の頼みごとの費用 | 案 約$0.1、遊びを作る 約$0.3〜0.9、調整 約$0.05〜0.15（上限 $3） |
 
+### 5分で試す（センサー・プロジェクターなしで）
+
+```bash
+npm install && npm run dev
+```
+
+壁の画面（http://127.0.0.1:5173）を**クリックやタップ**すると、ボールや手が当たったことになります。スマホ画面は PC のブラウザでも開けます。`.env` に Claude の APIキーを書くと、本物の Claude に遊びを頼めます。くわしくは [試す（センサーなし）](#試すセンサーなし)。
+
 **English:** *kabe-asobi* lets staff at children's centers create interactive wall games just by talking to Claude on a phone. A short-throw projector draws the game on a wall; a 2D LiDAR (SCIP 2.0) senses where balls and hands hit. Claude Code — through custom Skills, an MCP "wall server", a sub-agent that checks games from a child's point of view, and hooks — writes each game, verifies it automatically, calibrates the projection to the sensor, and tunes it on the spot ("make the targets bigger on the left for the little ones"). Everything is drawn and sounded from code (no external assets), and games that fail verification never reach the wall. Built from scratch during the hackathon; see the [manual](docs/manual.md) (Japanese).
 
 ---
