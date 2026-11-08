@@ -32,19 +32,23 @@ const { values: args } = parseArgs({
   },
 });
 
-// APIキーは .env から読み、このプロセスの中だけで使う
+// APIキーと、固定したい合言葉は .env から読み、このプロセスの中だけで使う
 const envFile = join(ROOT, ".env");
 let apiKey = "";
+let fixedKey = "";
 if (existsSync(envFile)) {
   for (const line of readFileSync(envFile, "utf8").split("\n")) {
-    const m = line.match(/^\s*ANTHROPIC_API_KEY\s*=\s*"?([^"\s]+)"?\s*$/);
-    if (m) apiKey = m[1]!;
+    const m = line.match(/^\s*(ANTHROPIC_API_KEY|KABE_PHONE_KEY)\s*=\s*"?([^"\s]+)"?\s*$/);
+    if (m?.[1] === "ANTHROPIC_API_KEY") apiKey = m[2]!;
+    if (m?.[1] === "KABE_PHONE_KEY") fixedKey = m[2]!;
   }
 }
 const assistant: Assistant =
   !args.mock && apiKey ? new ClaudeAssistant(ROOT, apiKey, { model: args.model }) : new MockAssistant();
 
-const KEY = args.key ?? randomBytes(4).toString("hex");
+// 合言葉：起動オプション → .env の KABE_PHONE_KEY → 起動のたびに変わる乱数。
+// .env で固定しておくと、職員は最初の一度だけ URL をスマホに保存すればよい
+const KEY = args.key ?? (fixedKey || randomBytes(4).toString("hex"));
 
 // ---- 会話の記録（画面を開き直しても続きが見えるように。ファイルは logs/ に、リポジトリには入れない） ----
 type Turn = { role: "staff" | "claude"; text: string; steps?: string[]; plan?: Plan; at: number; seconds?: number; costUsd?: number; error?: string };
